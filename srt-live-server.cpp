@@ -142,7 +142,7 @@ static void ctrl_c_handler(int s){
  * usage information
  */
 #define SLS_MAJOR_VERSION "1"
-#define SLS_MIN_VERSION "1.2"
+#define SLS_MIN_VERSION "1"
 static void usage()
 {
     printf("-------------------------------------------------\n");
