@@ -39,5 +39,8 @@ $ ./ffmpeg -f avfoundation -framerate 30 -i "0:0" -vcodec libx264  -preset ultra
 Note:
 
 1.SLS refer to the RTMP url format(domain/app/stream_name), example: www.sls.com/live/test. The url of SLS must be set in streamid parameter of SRT, which will be the unique identification a stream.
+
 2.How to distinguish the publisher and player of the same stream? In conf file, you can set parameters of domain_player/domain_publisher and app_player/app_publisher to resolve it. Importantly, the two combination strings of domain_publisher/app_publisher and domain_player/app_player must not be equal in the same server block.
+
+3.I supply a simple android app for test sls, your can download from https://github.com/Edward-Wu/liteplayer-srt
 
