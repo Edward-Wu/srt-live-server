@@ -30,10 +30,10 @@ public :
 	CSLSPlayer();
 	~CSLSPlayer();
 
-
     virtual int handler();
 
 private:
+
 
 };
 

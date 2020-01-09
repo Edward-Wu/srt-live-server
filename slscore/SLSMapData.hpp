@@ -16,35 +16,36 @@
  * if not, please contact with the author: Edward.Wu(edward_email@126.com)
  */
 
-#include <errno.h>
-#include <string.h>
+#ifndef _SLSMapData_INCLUDE_
+#define _SLSMapData_INCLUDE_
 
+#include <map>
+#include <string>
 
-#include "SLSPlayer.hpp"
-#include "SLSLog.hpp"
+#include "SLSRecycleArray.hpp"
+#include "SLSLock.hpp"
 
-/**
- * CSLSPlayer class implementation
- */
-
-CSLSPlayer::CSLSPlayer()
+class CSLSMapData
 {
-    m_is_write = 1;
+public:
+    CSLSMapData();
+    virtual ~CSLSMapData();
 
-    sprintf(m_role_name, "player");
-}
+    int  add(char *key);
+    int  remove(char *key);
+    void clear();
 
-CSLSPlayer::~CSLSPlayer()
-{
-}
+    int put(char *key, char *data, int len);
+    int get(char *key, char *data, int len, SLSRecycleArrayID *read_id);
 
+    bool is_exist(char *key);
 
-
-int CSLSPlayer::handler()
-{
-    return handler_write_data() ;
-}
-
+private:
+    std::map<std::string, CSLSRecycleArray *>    m_map_array;        //uplive_key_stream:data'
+    CSLSRWLock          m_rwclock;
 
 
+};
 
+
+#endif

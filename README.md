@@ -44,4 +44,3 @@ Note:
 
 3.I supply a simple android app for test sls, your can download from https://github.com/Edward-Wu/liteplayer-srt
 
-

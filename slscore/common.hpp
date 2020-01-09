@@ -71,7 +71,9 @@ using namespace std;
 
 int64_t sls_gettime(void);
 int64_t sls_gettime_relative(void);
+void    sls_gettime_fmt(char *dst, int64_t cur_time_sec, char *fmt);
 char  * sls_strupper(char * str);
 
+uint32_t sls_hash_key(const char *data, int len);
 
 #endif

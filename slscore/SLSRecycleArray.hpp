@@ -16,35 +16,49 @@
  * if not, please contact with the author: Edward.Wu(edward_email@126.com)
  */
 
-#include <errno.h>
+#ifndef _SLSRecycleArray_INCLUDE_
+#define _SLSRecycleArray_INCLUDE_
+
+#include <list>
 #include <string.h>
 
+#include "SLSLock.hpp"
 
-#include "SLSPlayer.hpp"
-#include "SLSLog.hpp"
+struct SLSRecycleArrayID
+{
+    int   nReadPos;
+    int   nDataCount;
+    bool  bFirst;
+};
+
 
 /**
- * CSLSPlayer class implementation
+ * CSLSRecycleArray
  */
-
-CSLSPlayer::CSLSPlayer()
+class CSLSRecycleArray
 {
-    m_is_write = 1;
+public :
+    CSLSRecycleArray();
+    ~CSLSRecycleArray();
 
-    sprintf(m_role_name, "player");
-}
+public :
+    int  put(char *data, int len);
+    int  get(char *dst, int size, SLSRecycleArrayID *read_id);
 
-CSLSPlayer::~CSLSPlayer()
-{
-}
-
-
-
-int CSLSPlayer::handler()
-{
-    return handler_write_data() ;
-}
-
-
+    void setSize(int n);
+    int  count();
+private:
+    char     *m_arrayData;
+    int       m_nDataSize;
+    int       m_nDataCount;
+    int       m_nWritePos;
 
 
+    CSLSRWLock m_rwclock;
+
+
+};
+
+
+
+#endif

@@ -309,7 +309,7 @@ int sls_conf_parse_block(ifstream& ifs, int& line, sls_conf_base_t * b, bool& ch
             break;
 
         } else {
-            sls_log(SLS_LOG_ERROR, "line:%d, invalid end flag, except ';', '{', '}',", line);
+            sls_log(SLS_LOG_ERROR, "line:%d='%s', invalid end flag, except ';', '{', '}',", str_line.c_str(), line);
             ret = SLS_ERROR;
             break;
         }

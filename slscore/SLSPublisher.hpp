@@ -23,6 +23,7 @@
 
 #include "SLSRole.hpp"
 #include "SLSRoleList.hpp"
+#include "SLSMapPublisher.hpp"
 
 /**
  * sls_conf_app_t
@@ -50,21 +51,17 @@ class CSLSPublisher: public CSLSRole
 {
 public :
     CSLSPublisher();
-    ~CSLSPublisher();
+    virtual ~CSLSPublisher();
+
+    void set_map_publisher(CSLSMapPublisher * publisher);
 
     virtual int init();
-
-    int add_player(CSLSRole * player);
-    int get_player_count();
+    virtual int uninit();
 
     virtual int  handler();
-    virtual void clear(bool invalid, bool del);
-
-    CSLSRoleList * get_player_list();
-    void           set_player_list(CSLSRoleList * players);
-
 private:
-    CSLSRoleList   * m_list_player;
+    CSLSMapPublisher  * m_map_publisher;
+
 };
 
 

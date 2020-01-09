@@ -35,10 +35,9 @@ public :
 
     int       push(CSLSRole *role);
     CSLSRole *pop();
-    void      erase(bool invalid, bool del);
+    void      erase();
     int       size();
 
-    int       push_data(const char *buf, int size);
 protected:
 
 private:

@@ -214,7 +214,7 @@ int CSLSSrt::libsrt_listen(int backlog)
     if (ret)
         return libsrt_neterrno();
 
-    sls_log(SLS_LOG_INFO, "[%p]CSLSSrt::libsrt_listen, fd=%d, at port=%d.", this, m_sc.fd, m_sc.port);
+    sls_log(SLS_LOG_INFO, "[%p]CSLSSrt::libsrt_listen, ok, fd=%d, at port=%d.", this, m_sc.fd, m_sc.port);
     return SLS_OK;
 }
 
@@ -332,9 +332,9 @@ int CSLSSrt::libsrt_read(char *buf, int size)
     int ret;
     ret = srt_recvmsg(m_sc.fd, buf, size);
     if (ret < 0) {
-        sls_log(SLS_LOG_WARNING, "[%p]CSLSSrt::libsrt_read failed, sock=%d, ret=%d.", this, m_sc.fd, ret);
         int err_no = libsrt_neterrno();
-        sls_log(SLS_LOG_WARNING, "[%p]CSLSSrt::libsrt_read failed, sock=%d, errno=%d.", this, m_sc.fd, err_no);
+        sls_log(SLS_LOG_WARNING, "[%p]CSLSSrt::libsrt_read failed, sock=%d, ret=%d, err_no=%d.",
+        		this, m_sc.fd, ret, err_no);
     }
     return ret;
 }

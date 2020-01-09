@@ -20,6 +20,7 @@
 #include <vector>
 #include <cstdarg>
 #include <sys/time.h>
+#include <string.h>
 
 
 #include "common.hpp"
@@ -79,10 +80,39 @@ int64_t sls_gettime_relative(void)
     return sls_gettime() + 42 * 60 * 60 * INT64_C(1000000);
 }
 
+
+void sls_gettime_fmt(char *dst, int64_t cur_time_sec, char *fmt)
+{
+    time_t rawtime;
+    struct tm * timeinfo;
+    char timef[32] = {0};
+
+    time (&rawtime);
+    rawtime = (time_t)cur_time_sec;
+    timeinfo = localtime (&rawtime);
+    strftime(timef, sizeof(timef), fmt, timeinfo);
+    strcpy(dst, timef);
+    return ;
+}
+
 char * sls_strupper(char * str)
 {
     char *orign=str;
     for (; *str!='\0'; str++)
         *str = toupper(*str);
     return orign;
+}
+
+#define sls_hash(key, c)   ((uint32_t) key * 31 + c)
+uint32_t sls_hash_key(const char *data, int len)
+{
+	//copy form ngx
+    uint32_t  i, key;
+
+    key = 0;
+
+    for (i = 0; i < len; i++) {
+        key = sls_hash(key, data[i]);
+    }
+    return key;
 }

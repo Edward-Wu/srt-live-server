@@ -70,8 +70,14 @@ void CSLSLog::print_log(int level, const char *fmt, va_list vl)
     CSLSLock lock(&m_mutex);
     char buf[4096] = {0};
     char buf_info[4096] = {0};
+    char cur_time[32] = {0};
+    int64_t cur_time_msec = sls_gettime()/1000;
+    int64_t cur_time_sec = cur_time_msec/1000;
+    cur_time_msec = cur_time_msec - cur_time_sec*1000;
+    sls_gettime_fmt(cur_time, cur_time_sec, "%Y-%m-%d %H:%M:%S");
     vsnprintf (buf , 4095 , fmt , vl);
-    sprintf(buf_info, "%s %s: %s\n" , APP_NAME, LOG_LEVEL_NAME[level], buf);
+    //sprintf(buf_info, "%s %s: %s\n" , cur_time, LOG_LEVEL_NAME[level], buf);
+    sprintf(buf_info, "%s:%03d %s %s: %s\n" , cur_time, cur_time_msec, APP_NAME, LOG_LEVEL_NAME[level], buf);
     printf(buf_info);
 
     if (m_log_file) {

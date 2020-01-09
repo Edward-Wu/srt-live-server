@@ -16,35 +16,33 @@
  * if not, please contact with the author: Edward.Wu(edward_email@126.com)
  */
 
-#include <errno.h>
-#include <string.h>
+#ifndef _SLSMapRelay_INCLUDE_
+#define _SLSMapRelay_INCLUDE_
 
+#include <map>
+#include <string>
 
-#include "SLSPlayer.hpp"
-#include "SLSLog.hpp"
+#include "SLSRelayManager.hpp"
+#include "SLSLock.hpp"
 
-/**
- * CSLSPlayer class implementation
- */
-
-CSLSPlayer::CSLSPlayer()
+class CSLSMapRelay
 {
-    m_is_write = 1;
+public:
+	CSLSMapRelay();
+    virtual ~CSLSMapRelay();
 
-    sprintf(m_role_name, "player");
-}
+    CSLSRelayManager *add_relay_manager(const char *app_uplive, const char *stream_name);
+    void clear();
 
-CSLSPlayer::~CSLSPlayer()
-{
-}
+    int add_relay_conf(std::string app_uplive, sls_conf_relay_t * cr);
+    SLS_RELAY_INFO *get_relay_conf(std::string app_uplive);
 
+private:
+    CSLSRWLock          m_rwclock;
+    std::map<std::string, CSLSRelayManager *>   m_map_relay_manager;        //stream_name: relay_manager
 
-
-int CSLSPlayer::handler()
-{
-    return handler_write_data() ;
-}
-
+    std::map<std::string, SLS_RELAY_INFO *>     m_map_relay_info;        //uplive: relay_conf_info
+};
 
 
-
+#endif

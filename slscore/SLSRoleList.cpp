@@ -55,7 +55,7 @@ CSLSRole * CSLSRoleList::pop()
 	return role;
 }
 
-void CSLSRoleList::erase(bool invalid, bool del)
+void CSLSRoleList::erase()
 {
     CSLSLock lock(&m_mutex);
     sls_log(SLS_LOG_TRACE, "[%p]CSLSRoleList::erase, list.count=%d", this, m_list_role.size());
@@ -63,24 +63,13 @@ void CSLSRoleList::erase(bool invalid, bool del)
     for (std::list<CSLSRole * >::iterator it = m_list_role.begin(); it != m_list_role.end();)
     {
         CSLSRole * role = *it;
-        if (!role) {
-            sls_log(SLS_LOG_WARNING, "[%p]CSLSRoleList::erase, %s[%p] is null, remove it.",
-                    this, role->get_role_name(), role);
-        }
         if (role) {
-            if (invalid)
-            {
-                role->set_parent(NULL);
-            }
-            if (del)
-            {
-                delete role;
-            }
+        	role->uninit();
+            delete role;
         }
-        it_erase = it;
         it ++;
-        m_list_role.erase(it_erase);
     }
+    m_list_role.clear();
 }
 
 
@@ -90,64 +79,7 @@ int CSLSRoleList::size()
     CSLSLock lock(&m_mutex);
 	return m_list_role.size();
 }
-/*
-int CSLSRoleList::read(char *buf, int size)
-{
-    int ret;
-	//dispatch data
-    for (std::list<CSLSRole * >::iterator it=m_list_role.begin(); it != m_list_role.end(); ++it)
-    {
-    	CSLSRole * role = *it;
-    	if (role) {
-    		role->read(buf, size);
-    	} else {
-            sls_log(SLS_LOG_INFO, "CSLSRoleList::read, role is null, remove it.");
-            it = m_list_role.erase(it);
-    	}
-    }
 
-    return ret;
-}
-*/
-
-
-int CSLSRoleList::push_data(const char *buf, int size)
-{
-    int ret;
-    CSLSLock lock(&m_mutex);
-    //dispatch data
-    std::list<CSLSRole * >::iterator it_erase;
-    for (std::list<CSLSRole * >::iterator it=m_list_role.begin(); it != m_list_role.end();)
-    {
-        CSLSRole * role = *it;
-        if (!role) {
-            it_erase = it;
-            it ++;
-            m_list_role.erase(it_erase);
-            sls_log(SLS_LOG_WARNING, "[%p]CSLSRoleList::push_data, %s[%p] is null, remove it, size=%d.",
-                    this, role->get_role_name(), role, m_list_role.size());
-            continue;
-
-        }
-
-        int state =role->get_state();
-        if (SLS_RS_INITED == state) {
-            ret = role->push_data(buf, size);
-            //ret = role->write(buf, size);
-            it ++;
-            continue;
-        }
-
-        sls_log(SLS_LOG_WARNING, "[%p]CSLSRoleList::push_data, %s[%p] is invalid, remove it, size=%d.",
-                this, role->get_role_name(), role, m_list_role.size());
-        role->set_parent(NULL);
-        it_erase = it;
-        it ++;
-        m_list_role.erase(it_erase);
-    }
-    return ret;
-
-}
 
 
 

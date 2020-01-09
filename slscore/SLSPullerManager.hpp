@@ -16,35 +16,38 @@
  * if not, please contact with the author: Edward.Wu(edward_email@126.com)
  */
 
-#include <errno.h>
-#include <string.h>
+#ifndef _SLSPulllerManager_INCLUDE_
+#define _SLSPulllerManager_INCLUDE_
 
+#include <vector>
+#include <string>
 
-#include "SLSPlayer.hpp"
-#include "SLSLog.hpp"
+#include "SLSRelayManager.hpp"
+#include "conf.hpp"
 
 /**
- * CSLSPlayer class implementation
+ * CSLSPullerManager
  */
-
-CSLSPlayer::CSLSPlayer()
+class CSLSPullerManager: public CSLSRelayManager
 {
-    m_is_write = 1;
+public :
+	CSLSPullerManager();
+    virtual ~CSLSPullerManager();
 
-    sprintf(m_role_name, "player");
-}
+    virtual int start();
+    virtual int add_reconnect_stream(char* relay_url);
+    virtual int reconnect(int64_t cur_tm_ms);
 
-CSLSPlayer::~CSLSPlayer()
-{
-}
+protected:
+
+    int connect_loop();
+    virtual CSLSRelay *create_relay();
+    virtual int set_relay_param(CSLSRelay *relay);
+    int check_relay_param();
+
+    int   m_cur_loop_index;
+
+};
 
 
-
-int CSLSPlayer::handler()
-{
-    return handler_write_data() ;
-}
-
-
-
-
+#endif

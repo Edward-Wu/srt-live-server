@@ -26,6 +26,8 @@
 #include "SLSGroup.hpp"
 #include "SLSListener.hpp"
 #include "conf.hpp"
+#include "SLSMapData.hpp"
+#include "SLSMapRelay.hpp"
 
 /**
  * srt conf declare
@@ -56,7 +58,7 @@ class CSLSManager
 {
 public :
 	CSLSManager();
-    ~CSLSManager();
+	virtual ~CSLSManager();
 
 
     int start();
@@ -69,6 +71,10 @@ public :
 private:
     std::vector<CSLSListener *>   m_vector_server;
     int                           m_server_count;
+    CSLSMapData                 * m_map_data;
+    CSLSMapPublisher            * m_map_publisher;
+    CSLSMapRelay                * m_map_puller;
+    CSLSMapRelay                * m_map_pusher;
 
     std::vector<CSLSGroup    *>   m_vector_worker;
     int                           m_worker_threads;

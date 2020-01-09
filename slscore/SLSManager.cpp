@@ -42,7 +42,10 @@ CSLSManager::CSLSManager()
     m_list_role      = NULL;
     m_single_group   = NULL;
 
-
+    m_map_data       = NULL;
+    m_map_publisher  = NULL;
+    m_map_puller     = NULL;
+    m_map_pusher     = NULL;
 }
 
 CSLSManager::~CSLSManager()
@@ -56,6 +59,7 @@ int CSLSManager::start()
 
     //role list
     m_list_role = new CSLSRoleList;
+    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, new m_list_role=%p.", this, m_list_role);
 
     //read config info from config file
 
@@ -81,12 +85,20 @@ int CSLSManager::start()
     }
     m_server_count = sls_conf_get_conf_count(conf_server);
     sls_conf_server_t * conf = conf_server;
+    m_map_data = new CSLSMapData[m_server_count];
+    m_map_publisher = new CSLSMapPublisher[m_server_count];
+    m_map_puller = new CSLSMapRelay[m_server_count];
+    m_map_pusher = new CSLSMapRelay[m_server_count];
+
     //create listeners according config, delete by groups
     for (i = 0; i < m_server_count; i ++) {
     	CSLSListener * p = new CSLSListener();//deleted by groups
     	p->set_role_list(m_list_role);
-    	p->set_parent(this);
         p->set_conf(conf);
+        p->set_map_data("", &m_map_data[i]);
+        p->set_map_publisher(&m_map_publisher[i]);
+        p->set_map_puller(&m_map_puller[i]);
+        p->set_map_pusher(&m_map_pusher[i]);
     	if (p->init() != SLS_OK) {
             sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, p->init failed.", this);
             return SLS_ERROR;
@@ -166,10 +178,29 @@ int CSLSManager::stop()
     }
     m_vector_worker.clear();
 
+    if (m_map_data) {
+    	delete[] m_map_data;
+    	m_map_data = NULL;
+    }
+    if (m_map_publisher) {
+    	delete[] m_map_publisher;
+    	m_map_publisher = NULL;
+    }
+
+    if (m_map_puller) {
+    	delete[] m_map_puller;
+    	m_map_puller = NULL;
+    }
+
+    if (m_map_pusher) {
+    	delete[] m_map_pusher;
+    	m_map_pusher = NULL;
+    }
+
     //release rolelist
     if(m_list_role) {
         sls_log(SLS_LOG_INFO, "[%p]CSLSManager::stop, release rolelist, size=%d.", this, m_list_role->size());
-    	m_list_role->erase(false, true);
+    	m_list_role->erase();
     	delete m_list_role;
     	m_list_role = NULL;
     }

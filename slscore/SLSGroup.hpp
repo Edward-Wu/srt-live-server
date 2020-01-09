@@ -24,6 +24,8 @@
 #include "SLSEpollThread.hpp"
 #include "SLSRoleList.hpp"
 #include "SLSRole.hpp"
+#include "SLSMapRelay.hpp"
+
 /**
  * CSLSGroup , group of players, publishers and listener
  */
@@ -49,11 +51,17 @@ private:
     CSLSRoleList           *   m_list_role;
     std::map<int, CSLSRole *>  m_map_role;
 
+    std::list<CSLSRelayManager *>  m_list_reconnect_relay_manager;
+
+
+    void  idle_check();
+    void  check_reconnect_relay();
     void  check_invalid_sock();
     void  check_new_role();
 
-    int m_worker_connections;
-    int m_worker_number;
+    int     m_worker_connections;
+    int     m_worker_number;
+    int64_t m_cur_time_microsec;
 
 };
 

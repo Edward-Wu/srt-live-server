@@ -20,31 +20,47 @@
 #include <string.h>
 
 
-#include "SLSPlayer.hpp"
+#include "SLSPuller.hpp"
 #include "SLSLog.hpp"
+#include "SLSMapRelay.hpp"
 
 /**
- * CSLSPlayer class implementation
+ * CSLSPuller class implementation
  */
 
-CSLSPlayer::CSLSPlayer()
+CSLSPuller::CSLSPuller()
 {
-    m_is_write = 1;
+    m_is_write             = 0;
+    sprintf(m_role_name, "puller");
 
-    sprintf(m_role_name, "player");
 }
 
-CSLSPlayer::~CSLSPlayer()
+int CSLSPuller::uninit()
 {
+	int ret = SLS_ERROR;
+	if (NULL != m_map_publisher) {
+		ret = m_map_publisher->remove(this);
+		sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::uninit, removed relay from m_map_publisher, ret=%d.",
+				this, ret);
+	}
+	if (m_map_data) {
+        ret = m_map_data->remove(m_map_data_key);
+		sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::uninit, removed relay from m_map_data, ret=%d.",
+				this, ret);
+	}
+	return CSLSRelay::uninit();
+
 }
 
-
-
-int CSLSPlayer::handler()
+CSLSPuller::~CSLSPuller()
 {
-    return handler_write_data() ;
+    //release
 }
 
+int CSLSPuller::handler()
+{
+	return handler_read_data();
+}
 
 
 

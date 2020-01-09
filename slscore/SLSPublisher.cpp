@@ -35,91 +35,55 @@ SLS_CONF_DYNAMIC_IMPLEMENT(app)
 
 CSLSPublisher::CSLSPublisher()
 {
-    m_is_write    = 0;
-    m_list_player = NULL;
+    m_is_write             = 0;
+    m_map_publisher        = NULL;
+
     sprintf(m_role_name, "publisher");
 
 }
+
 CSLSPublisher::~CSLSPublisher()
 {
     //release
-    clear(true, false);
 }
 
 int CSLSPublisher::init()
 {
     int ret = CSLSRole::init();
     if (m_conf) {
-        m_exit_delay = ((sls_conf_app_t *)m_conf)->publisher_exit_delay;
+        //m_exit_delay = ((sls_conf_app_t *)m_conf)->publisher_exit_delay;
     }
 
     return ret;
 }
 
-void CSLSPublisher::clear(bool invalid, bool del)
+int CSLSPublisher::uninit()
 {
-    if (m_list_player){
-        m_list_player->erase(invalid, del);
-        delete m_list_player;
-        m_list_player = NULL;
-    }
+    int ret = SLS_OK;
+
+	if (m_map_data) {
+        ret = m_map_data->remove(m_map_data_key);
+		sls_log(SLS_LOG_INFO, "[%p]CSLSPublisher::uninit, removed publisher from m_map_data, ret=%d.",
+				this, ret);
+	}
+
+	if (m_map_publisher) {
+        ret = m_map_publisher->remove(this);
+		sls_log(SLS_LOG_INFO, "[%p]CSLSPublisher::uninit, removed publisher from m_map_publisher, ret=%d.",
+				this, ret);
+	}
+    return CSLSRole::uninit();
 }
 
-
-int CSLSPublisher::add_player(CSLSRole * player)
+void CSLSPublisher::set_map_publisher(CSLSMapPublisher * publisher)
 {
-    if (NULL == m_list_player)
-        m_list_player = new CSLSRoleList;
-     m_list_player->push(player);
-     return 0;
+	m_map_publisher = publisher;
 }
-
 
 int CSLSPublisher::handler()
 {
-	char szData[TS_UDP_LEN];
-
-    sls_log(SLS_LOG_TRACE, "[%p]CSLSPublisher::handler.", this);
-	if (NULL == m_srt) {
-        sls_log(SLS_LOG_ERROR, "[%p]CSLSPublisher::handler, m_srt is null.", this);
-	    return SLS_ERROR;
-	}
-    //read data
-    sls_log(SLS_LOG_TRACE, "[%p]CSLSPublisher::handler, libsrt_read.", this);
-    int n = m_srt->libsrt_read(szData, TS_UDP_LEN);
-	if (n <= 0) {
-        sls_log(SLS_LOG_ERROR, "[%p]CSLSPublisher::handler, libsrt_read failure, n=%d.", this, n, TS_UDP_LEN);
-		uninit();
-	    return SLS_ERROR;
-	}
-    if (n != TS_UDP_LEN) {
-        sls_log(SLS_LOG_ERROR, "[%p]CSLSPublisher::handler, libsrt_read n=%d, expect %d.", this, n, TS_UDP_LEN);
-		uninit();
-        return SLS_ERROR;
-    }
-
-    sls_log(SLS_LOG_TRACE, "[%p]CSLSPublisher::handler, push_data, m_list_player.count=%d.", this, m_list_player?m_list_player->size():0);
-    if (m_list_player) {
-	    m_list_player->push_data(szData, n);
-    }
-
-	return n;
+    return handler_read_data();
 }
 
-CSLSRoleList * CSLSPublisher::get_player_list()
-{
-    return m_list_player;
-}
 
-void CSLSPublisher::set_player_list(CSLSRoleList * players)
-{
-    m_list_player = players;
-}
-
-int CSLSPublisher::get_player_count()
-{
-    if (m_list_player)
-        return  m_list_player->size();
-    return SLS_OK;
-}
 

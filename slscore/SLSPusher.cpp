@@ -20,31 +20,29 @@
 #include <string.h>
 
 
-#include "SLSPlayer.hpp"
+#include "SLSPusher.hpp"
 #include "SLSLog.hpp"
 
 /**
- * CSLSPlayer class implementation
+ * CSLSPusher class implementation
  */
 
-CSLSPlayer::CSLSPlayer()
+CSLSPusher::CSLSPusher()
 {
-    m_is_write = 1;
+    m_is_write             = 1;
+    sprintf(m_role_name, "pusher");
 
-    sprintf(m_role_name, "player");
 }
 
-CSLSPlayer::~CSLSPlayer()
+CSLSPusher::~CSLSPusher()
 {
+    //release
 }
 
-
-
-int CSLSPlayer::handler()
+int CSLSPusher::handler()
 {
-    return handler_write_data() ;
+	return handler_write_data();
 }
-
 
 
 

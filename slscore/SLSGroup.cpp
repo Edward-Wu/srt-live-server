@@ -23,7 +23,7 @@
 #include "SLSGroup.hpp"
 #include "SLSLog.hpp"
 
-#define POLLING_TIME 100 /// Time in milliseconds between interrupt check
+#define POLLING_TIME 1 /// Time in milliseconds between interrupt check
 
 /**
  * CSLSGroup class implementation
@@ -57,6 +57,7 @@ int CSLSGroup::stop()
 
 	return ret;
 }
+
 
 void CSLSGroup::check_new_role() {
 
@@ -101,27 +102,26 @@ int CSLSGroup::handler()
     //check epoll event
     ret = srt_epoll_wait(m_eid, m_read_socks, &read_len, m_write_socks, &write_len, POLLING_TIME, 0, 0, 0, 0);
     if (ret < 0) {
-        sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, srt_epoll_wait, no epoll event, ret=%d.",
-                this, m_worker_number, ret);
+        //sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, srt_epoll_wait, no epoll event, ret=%d.",
+        //        this, m_worker_number, ret);
     	ret = srt_getlasterror(NULL);
         if (ret == SRT_ETIMEOUT)//6003
             ret = SLSERROR(EAGAIN);
         else
             ret = CSLSSrt::libsrt_neterrno();
 
-        sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, check_invalid_sock, no epoll event.", this, m_worker_number);
-        check_invalid_sock();
-        sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, check_new_role, no epoll event.", this, m_worker_number);
-        check_new_role();
-        // no event sleep 1 ms.
-        msleep(1);
+    	idle_check();
         return ret;
     }
 
+    sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, writable sock count=%d, readable sock count=%d.",
+        this, m_worker_number, write_len, read_len);
     //handle writable sock
-    if (write_len > 0) {
-        sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, writable sock count=%d.", this, write_len);
-    }
+    //if (write_len > 0) {
+    //    sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, writable sock count=%d.",
+    //    		this, m_worker_number, write_len);
+    //}
+
     for (i = 0; i < write_len; i ++) {
         std::map<int, CSLSRole *>::iterator it = m_map_role.find(m_write_socks[i]);
         if (it == m_map_role.end()) {
@@ -140,18 +140,20 @@ int CSLSGroup::handler()
         ret = role->handler();
         if (ret < 0) {
         	//handle exception
-            role->uninit();
-            sls_log(SLS_LOG_WARNING, "[%p]CSLSGroup::handle, worker_number=%d, write sock=%d is invalid, %s=%p, write_len=%d, role_map.size=%d.",
+            sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, write sock=%d is invalid, %s=%p, write_len=%d, role_map.size=%d.",
                     this, m_worker_number, m_write_socks[i], role->get_role_name(), role, write_len, m_map_role.size());
+        	role->invalid_srt();
+        } else {
+            handler_count += ret;
         }
-        handler_count += ret;
     }
 
     //handle readable sock
-    if (read_len > 0) {
-        sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, readable sock count=%d.",
-                this, m_worker_number, read_len);
-    }
+    //if (read_len > 0) {
+    //    sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, readable sock count=%d.",
+    //            this, m_worker_number, read_len);
+    //}
+
     for (i = 0; i < read_len; i ++) {
         std::map<int, CSLSRole *>::iterator it = m_map_role.find(m_read_socks[i]);
         if (it == m_map_role.end()) {
@@ -170,26 +172,59 @@ int CSLSGroup::handler()
         ret = role->handler();
         if (ret < 0) {
         	//handle exception
-            role->uninit();
-            sls_log(SLS_LOG_WARNING, "[%p]CSLSGroup::handle, worker_number=%d, readable sock=%d is invalid, %s=%p, readable len=%d, role_map.size=%d.",
+            sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, readable sock=%d is invalid, %s=%p, readable len=%d, role_map.size=%d.",
                       this, m_worker_number, m_read_socks[i], role->get_role_name(), role, read_len, m_map_role.size());
+        	role->invalid_srt();
+        } else {
+            handler_count += ret;
         }
-        handler_count += ret;
     }
 
     if (0 == handler_count) {
-        sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, check_invalid_sock, handler_count=0.", this, m_worker_number);
-        check_invalid_sock();
-        sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, check_new_role, handler_count=0.", this, m_worker_number);
-        check_new_role();
-        //sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, handler_count=0, sleep a moment.", this);
-        msleep(1);
+    	idle_check();
     }
 	return SLS_OK;
 }
 
+void CSLSGroup::idle_check()
+{
+	check_reconnect_relay();
+    check_invalid_sock();
+    check_new_role();
+}
+
+void CSLSGroup::check_reconnect_relay()
+{
+	int64_t cur_time_microsec = sls_gettime_relative();//m_cur_time_microsec;
+
+	CSLSRelayManager * relay_manager = NULL;
+    std::list<CSLSRelayManager * >::iterator it_erase;
+    std::list<CSLSRelayManager * >::iterator it;
+    for ( it = m_list_reconnect_relay_manager.begin(); it != m_list_reconnect_relay_manager.end();)
+    {
+    	CSLSRelayManager * relay_manager = *it;
+        if (NULL == relay_manager)
+        {
+			sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_reconnect_relay, worker_number=%d, remove invalid relay_manager.", this);
+    		it_erase = it;
+    		it ++;
+    		m_list_reconnect_relay_manager.erase(it_erase);
+        	continue;
+        }
+        int ret = relay_manager->reconnect(cur_time_microsec/1000);
+        if (SLS_OK != ret) {
+        	it ++;
+        	continue;
+        }
+		it_erase = it;
+		it ++;
+		m_list_reconnect_relay_manager.erase(it_erase);
+    }
+}
+
 void CSLSGroup::check_invalid_sock()
 {
+	int64_t cur_time_microsec = sls_gettime_relative();//m_cur_time_microsec;
     std::map<int, CSLSRole *>::iterator it;
     std::map<int, CSLSRole *>::iterator it_erase;
     for(it=m_map_role.begin(); it!=m_map_role.end();) {
@@ -198,32 +233,30 @@ void CSLSGroup::check_invalid_sock()
             it ++;
             continue;
         }
+		//close in network
+		//int ret = role->get_sock_state();
+		//if (role->get_fd() == 0 || SLS_ERROR == ret || SRTS_BROKEN == ret || SRTS_CLOSED == ret || SRTS_NONEXIST == ret) {
+			//if (!role->idle_streams())
+        int state = role->get_state(cur_time_microsec);
+        if (SLS_RS_INVALID == state || SLS_RS_UNINIT == state)
+		{
+			sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, delete %s=%p, invalid sock=%d, state=%d, role_map.size=%d.",
+				  this, m_worker_number, role->get_role_name(), role, role->get_fd(), state, m_map_role.size());
+			//check relay
+			if (role->is_reconnect()) {
+				CSLSRelay * relay = (CSLSRelay *)role;
+				CSLSRelayManager * relay_manager = (CSLSRelayManager *)relay->get_relay_manager();
+				m_list_reconnect_relay_manager.push_back(relay_manager);
+			}
 
-        if (role->get_parent() == NULL) {
-             //no parent, delete
-            sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, %s=%p no parent, remove and delete, role_map.size=%d.",
-                    this, m_worker_number, role->get_role_name(), role, m_map_role.size());
-
-            it_erase = it;
-            it ++;
-            m_map_role.erase(it_erase);
-
-            role->uninit();
-            delete role;
-            continue;
-        }
-
-        int state = role->get_state();
-        if (SLS_RS_INITED == state) {
-            //close in network
-            int ret = role->get_sock_state();
-            if (SRTS_BROKEN == ret || SRTS_CLOSED == ret || SRTS_NONEXIST == ret) {
-                sls_log(SLS_LOG_WARNING, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, %s=%p, invalid sock=%d, role_map.size=%d.",
-                          this, m_worker_number, role->get_role_name(), role, role->get_fd(), m_map_role.size());
-                role->uninit();
-            }
-        }
-        it ++;
+			role->uninit();
+			delete role;
+			it_erase = it;
+			it ++;
+			m_map_role.erase(it_erase);
+			continue;
+		}
+		it ++;
     }
 }
 
@@ -235,8 +268,9 @@ void CSLSGroup::clear()
     for(it=m_map_role.begin(); it!=m_map_role.end(); it++) {
         CSLSRole * role = it->second;
         if (role) {
+            sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::clear, worker_number=%d, delete role=%p.",
+                    this, m_worker_number, role);
             role->uninit();
-            role->clear(false, false);
             delete role;
         }
     }
@@ -257,5 +291,6 @@ void CSLSGroup::set_worker_connections(int n)
 {
     m_worker_connections = n;
 }
+
 
 

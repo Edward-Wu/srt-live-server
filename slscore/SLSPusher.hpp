@@ -16,35 +16,24 @@
  * if not, please contact with the author: Edward.Wu(edward_email@126.com)
  */
 
-#include <errno.h>
-#include <string.h>
+#ifndef _SLSPusher_INCLUDE_
+#define _SLSPusher_INCLUDE_
 
-
-#include "SLSPlayer.hpp"
-#include "SLSLog.hpp"
+#include "SLSRelay.hpp"
 
 /**
- * CSLSPlayer class implementation
+ * CSLSPuller
  */
-
-CSLSPlayer::CSLSPlayer()
+class CSLSPusher: public CSLSRelay
 {
-    m_is_write = 1;
+public :
+	CSLSPusher();
+    virtual ~CSLSPusher();
 
-    sprintf(m_role_name, "player");
-}
+    virtual int  handler();
+private:
 
-CSLSPlayer::~CSLSPlayer()
-{
-}
-
-
-
-int CSLSPlayer::handler()
-{
-    return handler_write_data() ;
-}
+};
 
 
-
-
+#endif

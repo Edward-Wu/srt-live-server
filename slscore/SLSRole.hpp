@@ -19,16 +19,25 @@
 #ifndef _SLSRole_INCLUDE_
 #define _SLSRole_INCLUDE_
 
+#include <map>
+
+
 #include "SLSRole.hpp"
 #include "SLSSrt.hpp"
-#include "SLSRecycleList.hpp"
+#include "SLSMapData.hpp"
 #include "conf.hpp"
+#include "SLSLock.hpp"
+#include "common.hpp"
+
 
 enum SLS_ROLE_STATE {
     SLS_RS_UNINIT = 0,
     SLS_RS_INITED = 1,
-    SLS_RS_INVALID = 2,
+	SLS_RS_IDLE_STREAM = 2,
+    SLS_RS_INVALID = 3,
 };
+
+const int DATA_BUFF_SIZE = 100 * 1316;
 /**
  * CSLSRole , the base of player, publisher and listener
  */
@@ -41,9 +50,10 @@ public :
 
     virtual int init();
     virtual int uninit();
+    virtual int handler();
 
-    virtual int  handler();
-    virtual void clear(bool invalid, bool del);
+    int         open(char *url);
+    int         close();
 
     int         get_fd();
     int         set_eid(int eid);
@@ -53,34 +63,48 @@ public :
     int         invalid_srt();
 
     int         write(const char *buf, int size);
-    int         push_data(const char *buf, int size);
 
     int         add_to_epoll(int eid);
     int         remove_from_epoll();
-    int         get_state();
+    int         get_state(int64_t cur_time_microsec = 0);
     int         get_sock_state();
     char      * get_role_name();
-    void        set_parent(void * parent);
-    void      * get_parent();
 
-    void        set_conf(sls_conf_base_t * conf);
+    void        set_conf(sls_conf_base_t *conf);
+    void        set_map_data(char *map_key, CSLSMapData *map_data);
 
+    void        set_idle_streams_timeout(int timeout);
+
+    char      * get_streamid();
+    bool        is_reconnect();
 
 protected:
     CSLSSrt    * m_srt;
     bool         m_is_write;//listener: 0, publisher: 0, player: 1
-    bool         m_inited;
-    int64_t      m_invalid_tm;
-    int          m_exit_delay;//unit: s
+    int64_t      m_invalid_begin_tm;
+    int          m_idle_streams_timeout;//unit: s
     int          m_latency;//ms
 
     int          m_state;
     int          m_back_log;//maximum number of connections at the same time
-    void       * m_parent;
     char         m_role_name[256];
+    char         m_streamid[256];
 
     sls_conf_base_t   * m_conf;
-    CSLSRecycleList     m_list_data;
+
+    CSLSMapData       * m_map_data;
+    char                m_map_data_key[1024];
+    SLSRecycleArrayID   m_map_data_id;
+
+    int handler_write_data();
+    int handler_read_data();
+
+
+    char          m_data[DATA_BUFF_SIZE];
+    int           m_data_len;
+    int           m_data_pos;
+
+    bool          m_need_reconnect;
 
 private:
 
