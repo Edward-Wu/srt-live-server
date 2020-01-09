@@ -44,3 +44,8 @@ Note:
 
 3.I supply a simple android app for test sls, your can download from https://github.com/Edward-Wu/liteplayer-srt
 
+ReleaseNote
+V1.2
+1. update the memory mode, in v1.1 which is publisher copy data to eacc player, in v1.2 each publisher put data to a array and all players read data from this array.
+2. update the relation of the publisher and player, the player is not a member of publisher. the only relation of them is array data.
+3. add push and pull features, support all and hash mode for push, support loop and hash for pull. in cluster mode, you can push a stream to a hash node, and pull this stream from the same hash node.
