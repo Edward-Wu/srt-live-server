@@ -78,7 +78,7 @@ void *CSLSRelay::get_relay_manager()
 	return m_relay_manager;
 }
 
-int CSLSRelay::parse_url(char* url, char * ip, int& port, char * streamid) {
+int CSLSRelay::parse_url(char* url, char *host_name, int& port, char * streamid) {
     //
     if (strlen(url) == 0) {
     	sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::parse_url='%s', url must like 'srt://hostname:port?streamid=your_stream_id' or 'srt://hostname:port/app/stream_name'.",
@@ -107,7 +107,7 @@ int CSLSRelay::parse_url(char* url, char * ip, int& port, char * streamid) {
     char * p_tmp = strchr(p, ':');
     if (p_tmp) {
         p_tmp[0] = 0x00;
-        strcpy(ip, p);
+        strcpy(host_name, p);
         p = p_tmp + 1;
     }
     else {
@@ -120,7 +120,7 @@ int CSLSRelay::parse_url(char* url, char * ip, int& port, char * streamid) {
 	bool b_streamid = false;
     p_tmp = strchr(p, '?');
     if (!p_tmp) {
-    	sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::parse_url='%s', no '?' param in '%s', come on.",
+    	sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::parse_url='%s', no '?' param, come on.",
     			this, m_url);
         p_tmp = strchr(p, '/');//app
         if (!p_tmp) {//app
@@ -168,10 +168,12 @@ int CSLSRelay::parse_url(char* url, char * ip, int& port, char * streamid) {
 			return SLS_ERROR;
 		}
 		p = p_tmp + 1;
+	    strcpy(streamid, p);
     } else {
-        p = m_url + strlen("srt://");
+    	p_tmp = m_url + strlen("srt://");
+		p_tmp = strchr(p, '/');
+    	sprintf(streamid, "%s%s", host_name, p_tmp);
     }
-    strcpy(streamid, p);
     return SLS_OK;
 
 }
@@ -180,7 +182,8 @@ int CSLSRelay::open(const char * srt_url) {
 
     int yes = 1;
     int no = 0;
-    char server_ip[128] = "192.168.31.56";
+    char host_name[128] = "192.168.31.56";
+    char server_ip[128] = "";
     int server_port = 8080;
     char streamid[1024] = "uplive.sls.net/live/1234";
     char url[1024] = {0};
@@ -197,7 +200,7 @@ int CSLSRelay::open(const char * srt_url) {
     }
 
     //parse url
-    if (SLS_OK != parse_url(url, server_ip, server_port, streamid)){
+    if (SLS_OK != parse_url(url, host_name, server_port, streamid)){
         return SLS_ERROR;
     }
 	sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::open, parse_url ok, url='%s'.", this, m_url);
@@ -248,6 +251,7 @@ int CSLSRelay::open(const char * srt_url) {
     sa.sin_family = AF_INET;
     sa.sin_port = htons(server_port);
 
+    sls_gethostbyname(host_name, server_ip);
     if (inet_pton(AF_INET, server_ip, &sa.sin_addr) != 1) {
     	sls_log(SLS_LOG_ERROR, "[%p]CSLSRelay::open, inet_pton failure. server_ip=%s, server_port=%d.", this, server_ip, server_port);
         return SLS_ERROR;

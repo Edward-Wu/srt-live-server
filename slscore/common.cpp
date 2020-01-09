@@ -21,6 +21,12 @@
 #include <cstdarg>
 #include <sys/time.h>
 #include <string.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
 
 
 #include "common.hpp"
@@ -116,3 +122,42 @@ uint32_t sls_hash_key(const char *data, int len)
     }
     return key;
 }
+
+int sls_gethostbyname(const char *hostname, char *ip)
+{
+    char   *ptr, **pptr;
+    struct hostent *hptr;
+    char   str[32];
+    ptr = (char *)hostname;
+
+    if((hptr = gethostbyname(ptr)) == NULL)
+     {
+         printf("sls_gethostbyname: gethostbyname error for host:%s\n", ptr);
+         return 0;
+     }
+
+/*
+    printf("official hostname:%s\n",hptr->h_name);
+     for(pptr = hptr->h_aliases; *pptr != NULL; pptr++)
+         printf(" alias:%s\n",*pptr);
+*/
+
+     switch(hptr->h_addrtype)
+     {
+         case AF_INET:
+         case AF_INET6:
+             //pptr=hptr->h_addr_list;
+             //for(; *pptr!=NULL; pptr++)
+             //    printf(" address:%s\n",
+             //           inet_ntop(hptr->h_addrtype, *pptr, str, sizeof(str)));
+
+        	 //copy the 1st ip
+             strcpy(ip, inet_ntop(hptr->h_addrtype, hptr->h_addr, str, sizeof(str)));
+         break;
+         default:
+             printf("sls_gethostbyname: unknown address type\n");
+         break;
+     }
+
+     return 0;
+ }

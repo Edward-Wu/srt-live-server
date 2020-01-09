@@ -75,5 +75,6 @@ void    sls_gettime_fmt(char *dst, int64_t cur_time_sec, char *fmt);
 char  * sls_strupper(char * str);
 
 uint32_t sls_hash_key(const char *data, int len);
+int      sls_gethostbyname(const char *hostname, char *ip);
 
 #endif
