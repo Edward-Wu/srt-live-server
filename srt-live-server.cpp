@@ -142,7 +142,7 @@ static void ctrl_c_handler(int s){
  * usage information
  */
 #define SLS_MAJOR_VERSION "1"
-#define SLS_MIN_VERSION "1"
+#define SLS_MIN_VERSION "2"
 static void usage()
 {
     printf("-------------------------------------------------\n");
@@ -179,6 +179,9 @@ int main(int argc, char* argv[])
     if (strlen(sls_opt.log_level) > 0) {
         sls_set_log_level(sls_opt.log_level);
     }
+
+    //test
+    CSLSSrt::libsrt_print_error_info();
 
     //parse conf file
     if (strlen(sls_opt.conf_file_name) == 0) {

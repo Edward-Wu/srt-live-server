@@ -8,8 +8,10 @@ BIN_PATH = ./bin
 DEBUG = -g
 CFLAGS += $(DEBUG)
 
-OUTPUT_PATH = ./obj
+LOG_PATH = ./logs
 
+
+OUTPUT_PATH = ./obj
 OBJS = $(OUTPUT_PATH)/SLSLog.o \
 	$(OUTPUT_PATH)/common.o\
 	$(OUTPUT_PATH)/conf.o\
@@ -23,14 +25,24 @@ OBJS = $(OUTPUT_PATH)/SLSLog.o \
 	$(OUTPUT_PATH)/SLSSrt.o\
 	$(OUTPUT_PATH)/SLSPublisher.o\
 	$(OUTPUT_PATH)/SLSPlayer.o\
-	$(OUTPUT_PATH)/SLSRecycleList.o\
-
-				
+	$(OUTPUT_PATH)/SLSRecycleArray.o\
+	$(OUTPUT_PATH)/SLSMapData.o\
+	$(OUTPUT_PATH)/SLSMapPublisher.o\
+	$(OUTPUT_PATH)/SLSRelay.o\
+	$(OUTPUT_PATH)/SLSPuller.o\
+	$(OUTPUT_PATH)/SLSPusher.o\
+	$(OUTPUT_PATH)/SLSRelayManager.o\
+	$(OUTPUT_PATH)/SLSPullerManager.o\
+	$(OUTPUT_PATH)/SLSPusherManager.o\
+	$(OUTPUT_PATH)/SLSMapRelay.o\
+			
 	
 CORE_PATH = slscore
 COMMON_FILES = common.hpp
 
 all: $(OBJS)
+	mkdir -p ${LOG_PATH}
+	mkdir -p ${OUTPUT_PATH}
 	mkdir -p ${BIN_PATH}
 	g++ -o ${BIN_PATH}/${MAIN_NAME} srt-live-server.cpp $(OBJS) $(CFLAGS) $(INC_PATH) $(LIB_PATH) $(LIBRARY_FILE)
 	#******************************************************************************#
@@ -75,10 +87,38 @@ $(OUTPUT_PATH)/SLSPublisher.o: ./$(CORE_PATH)/SLSPublisher.cpp
 	
 $(OUTPUT_PATH)/SLSPlayer.o: ./$(CORE_PATH)/SLSPlayer.cpp 
 	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
-
-$(OUTPUT_PATH)/SLSRecycleList.o: ./$(CORE_PATH)/SLSRecycleList.cpp 
+	
+$(OUTPUT_PATH)/SLSRecycleArray.o: ./$(CORE_PATH)/SLSRecycleArray.cpp 
 	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
 	
+$(OUTPUT_PATH)/SLSMapData.o: ./$(CORE_PATH)/SLSMapData.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSMapPublisher.o: ./$(CORE_PATH)/SLSMapPublisher.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSRelay.o: ./$(CORE_PATH)/SLSRelay.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSPuller.o: ./$(CORE_PATH)/SLSPuller.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSPusher.o: ./$(CORE_PATH)/SLSPusher.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSRelayManager.o: ./$(CORE_PATH)/SLSRelayManager.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSPullerManager.o: ./$(CORE_PATH)/SLSPullerManager.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSPusherManager.o: ./$(CORE_PATH)/SLSPusherManager.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSMapRelay.o: ./$(CORE_PATH)/SLSMapRelay.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
 clean:
 	rm -f $(OUTPUT_PATH)/*.o
+	rm -rf $(BIN_PATH)/*
 
