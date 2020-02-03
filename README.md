@@ -56,3 +56,9 @@ v1.2
 
 v1.2.1
 1. support hostname:port/app in upstreams of pull and push.
+
+v1.3
+1. support reload.
+2. add idle_streams_timeout feature for relay.
+
+

@@ -6,5 +6,7 @@ V1.2
 3. add push feature. support all and hash mode.
    all: push all upstreams. 
    hash: hash to one of upstreams.
-
+v1.3
+1. support reload.
+2. add idle_streams_timeout feature for relay.
 
