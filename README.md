@@ -60,5 +60,5 @@ v1.2.1
 v1.3
 1. support reload.
 2. add idle_streams_timeout feature for relay.
-3. change license from gpl to mit.
+3. change license type from gpl to mit.
 
