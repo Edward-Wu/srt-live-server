@@ -1,20 +1,27 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 
 #include <errno.h>
 #include <string.h>
@@ -31,9 +38,10 @@
 
 CSLSGroup::CSLSGroup()
 {
-    m_list_role = NULL;
-    m_worker_connections = 100;//for test
+    m_list_role          = NULL;
+    m_worker_connections = 100;
     m_worker_number      = 0;
+    m_reload             = false;
 }
 
 CSLSGroup::~CSLSGroup()
@@ -58,6 +66,10 @@ int CSLSGroup::stop()
 	return ret;
 }
 
+void CSLSGroup::reload()
+{
+    m_reload = true;
+}
 
 void CSLSGroup::check_new_role() {
 
@@ -99,6 +111,13 @@ int CSLSGroup::handler()
 
     int handler_count = 0;
 
+    if (m_reload && (m_map_role.size() == 0)) {
+        sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::handle, worker_number=%d stop, m_reload is true, m_map_role.size()=0.",
+               this, m_worker_number);
+    	m_exit = true;
+    	return SLS_OK;
+    }
+
     //check epoll event
     ret = srt_epoll_wait(m_eid, m_read_socks, &read_len, m_write_socks, &write_len, POLLING_TIME, 0, 0, 0, 0);
     if (ret < 0) {
@@ -116,11 +135,6 @@ int CSLSGroup::handler()
 
     sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, writable sock count=%d, readable sock count=%d.",
         this, m_worker_number, write_len, read_len);
-    //handle writable sock
-    //if (write_len > 0) {
-    //    sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, writable sock count=%d.",
-    //    		this, m_worker_number, write_len);
-    //}
 
     for (i = 0; i < write_len; i ++) {
         std::map<int, CSLSRole *>::iterator it = m_map_role.find(m_write_socks[i]);
@@ -148,12 +162,6 @@ int CSLSGroup::handler()
         }
     }
 
-    //handle readable sock
-    //if (read_len > 0) {
-    //    sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, readable sock count=%d.",
-    //            this, m_worker_number, read_len);
-    //}
-
     for (i = 0; i < read_len; i ++) {
         std::map<int, CSLSRole *>::iterator it = m_map_role.find(m_read_socks[i]);
         if (it == m_map_role.end()) {
@@ -180,8 +188,10 @@ int CSLSGroup::handler()
         }
     }
 
+	idle_check();
     if (0 == handler_count) {
-    	idle_check();
+    	//release cpu
+        msleep(POLLING_TIME);
     }
 	return SLS_OK;
 }
@@ -233,10 +243,7 @@ void CSLSGroup::check_invalid_sock()
             it ++;
             continue;
         }
-		//close in network
-		//int ret = role->get_sock_state();
-		//if (role->get_fd() == 0 || SLS_ERROR == ret || SRTS_BROKEN == ret || SRTS_CLOSED == ret || SRTS_NONEXIST == ret) {
-			//if (!role->idle_streams())
+
         int state = role->get_state(cur_time_microsec);
         if (SLS_RS_INVALID == state || SLS_RS_UNINIT == state)
 		{
@@ -247,6 +254,8 @@ void CSLSGroup::check_invalid_sock()
 				CSLSRelay * relay = (CSLSRelay *)role;
 				CSLSRelayManager * relay_manager = (CSLSRelayManager *)relay->get_relay_manager();
 				m_list_reconnect_relay_manager.push_back(relay_manager);
+				sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, %s=%p, need reconnect.",
+					  this, m_worker_number, role->get_role_name(), role);
 			}
 
 			role->uninit();

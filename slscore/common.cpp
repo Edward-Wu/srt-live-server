@@ -1,19 +1,25 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #include <string>
@@ -26,6 +32,14 @@
 #include <stdio.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 
 
@@ -161,3 +175,230 @@ int sls_gethostbyname(const char *hostname, char *ip)
 
      return 0;
  }
+
+static void av_str_replace(char *buf, const char dst, const char ch)
+{
+    char *p = NULL;
+    while(1) {
+        p = strchr(buf, dst);
+        if (p == NULL)
+            break;
+        *p++ = ch;
+    }
+}
+static size_t max_alloc_size= 1024000;// max 1M
+
+static void *av_malloc(size_t size)
+{
+    void *ptr = NULL;
+
+    /* let's disallow possibly ambiguous cases */
+    if (size > (max_alloc_size - 32))
+        return NULL;
+
+#if HAVE_POSIX_MEMALIGN
+    if (size) //OS X on SDK 10.6 has a broken posix_memalign implementation
+    if (posix_memalign(&ptr, ALIGN, size))
+        ptr = NULL;
+#elif HAVE_ALIGNED_MALLOC
+    ptr = _aligned_malloc(size, ALIGN);
+#elif HAVE_MEMALIGN
+#ifndef __DJGPP__
+    ptr = memalign(ALIGN, size);
+#else
+    ptr = memalign(size, ALIGN);
+#endif
+    /* Why 64?
+     * Indeed, we should align it:
+     *   on  4 for 386
+     *   on 16 for 486
+     *   on 32 for 586, PPro - K6-III
+     *   on 64 for K7 (maybe for P3 too).
+     * Because L1 and L2 caches are aligned on those values.
+     * But I don't want to code such logic here!
+     */
+    /* Why 32?
+     * For AVX ASM. SSE / NEON needs only 16.
+     * Why not larger? Because I did not see a difference in benchmarks ...
+     */
+    /* benchmarks with P3
+     * memalign(64) + 1          3071, 3051, 3032
+     * memalign(64) + 2          3051, 3032, 3041
+     * memalign(64) + 4          2911, 2896, 2915
+     * memalign(64) + 8          2545, 2554, 2550
+     * memalign(64) + 16         2543, 2572, 2563
+     * memalign(64) + 32         2546, 2545, 2571
+     * memalign(64) + 64         2570, 2533, 2558
+     *
+     * BTW, malloc seems to do 8-byte alignment by default here.
+     */
+#else
+    ptr = malloc(size);
+#endif
+
+    if (ptr)
+        memset(ptr, 0, size);
+    return ptr;
+}
+static void av_free(void *arg)
+{
+    //memcpy(arg, &(void *){ NULL }, sizeof(arg));
+    free(arg);
+}
+
+static char *av_strdup(const char *s)
+{
+    char *ptr = NULL;
+    if (s) {
+        size_t len = strlen(s) + 1;
+        ptr = (char *)av_malloc(len);
+        if (ptr)
+            memcpy(ptr, s, len);
+    }
+    return ptr;
+}
+
+/**
+ * Locale-independent conversion of ASCII characters to lowercase.
+ */
+static inline int av_tolower(int c)
+{
+    if (c >= 'A' && c <= 'Z')
+        c ^= 0x20;
+    return c;
+}
+
+static int av_strncasecmp(const char *a, const char *b, size_t n)
+{
+    uint8_t c1, c2;
+    if (n <= 0)
+        return 0;
+    do {
+        c1 = av_tolower(*a++);
+        c2 = av_tolower(*b++);
+    } while (--n && c1 && c1 == c2);
+    return c1 - c2;
+}
+
+static int sls_mkdir_p(const char *path)
+{
+
+    int ret = 0;
+    char *temp = av_strdup(path);
+    char *pos = temp;
+    char tmp_ch = '\0';
+
+    if (!path || !temp) {
+        return -1;
+    }
+
+    if (!av_strncasecmp(temp, "/", 1) || !av_strncasecmp(temp, "\\", 1)) {
+        pos++;
+    } else if (!av_strncasecmp(temp, "./", 2) || !av_strncasecmp(temp, ".\\", 2)) {
+        pos += 2;
+    }
+
+    for ( ; *pos != '\0'; ++pos) {
+        if (*pos == '/' || *pos == '\\') {
+            tmp_ch = *pos;
+            *pos = '\0';
+            ret = mkdir(temp, 0755);
+            *pos = tmp_ch;
+        }
+    }
+
+    if ((*(pos - 1) != '/') || (*(pos - 1) != '\\')) {
+        ret = mkdir(temp, 0755);
+    }
+
+    av_free(temp);
+    return ret;
+}
+
+
+static char pid_path_name[] = "~/sls";
+static char pid_file_name[] = "~/sls/pid.txt";
+int sls_read_pid()
+{
+	struct stat stat_file;
+	int ret = stat(pid_file_name, &stat_file);
+    if (0 != ret) {
+    	printf("no pid file='%s'.\n", pid_file_name);
+    	return 0;
+    }
+
+    int fd = open(pid_file_name, O_RDONLY);
+    if (0 == fd)  {
+    	printf("open file='%s' failed.\n", pid_file_name);
+    	return 0;
+    }
+    char pid[128] = {0};
+    int n = read(fd, pid, sizeof(pid));
+    ret = atoi(pid);
+    close(fd);
+    return ret;
+}
+
+int sls_write_pid(int pid)
+{
+	struct stat stat_file;
+	int fd = 0;
+
+	if (sls_mkdir_p(pid_path_name) == -1 && errno != EEXIST) {
+	    printf( "mkdir '%s' failed.\n", pid_path_name);
+	    return -1;
+	}
+    fd = open(pid_file_name, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+
+    if (0 == fd) {
+    	printf("open file='%s' failed, '%s'.\n", pid_file_name, strerror(errno));
+    	return -1;
+    }
+    char buf[128] = {0};
+    sprintf(buf, "%d", pid);
+    write(fd, buf, strlen(buf));
+    close(fd);
+	printf("write pid ok, file='%s', pid=%s.\n", pid_file_name, buf);
+    return 0;
+
+}
+
+int sls_remove_pid()
+{
+	struct stat stat_file;
+    if (0 == stat(pid_file_name, &stat_file)) {
+    	FILE *fd = fopen(pid_file_name, "w");
+        fclose(fd);
+    }
+    return 0;
+}
+
+int sls_send_cmd(const char *cmd)
+{
+	if (NULL == cmd) {
+    	printf("sls_send_cmd failed, cmd is null.\n");
+		return SLS_ERROR;
+	}
+	int pid = sls_read_pid();
+	if (0 >= pid) {
+    	printf("sls_send_cmd failed, pid is invalid.\n", pid);
+        return SLS_OK;
+	}
+
+	//reload?
+    if (strcmp(cmd, "reload") == 0) {
+    	//reload the existed sls
+     	printf("sls_send_cmd ok, reload, sls pid = %d, send SIGUP to it.\n", pid);
+    	kill(pid, SIGHUP);
+        return SLS_OK;
+    }
+
+	//ctrl + c
+    if (strcmp(cmd, "stop") == 0) {
+    	//
+     	printf("sls_send_cmd ok, stop, sls pid = %d, send SIGINT to it.\n", pid);
+    	kill(pid, SIGINT);
+        return SLS_OK;
+    }
+    return SLS_OK;
+}

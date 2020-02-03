@@ -1,20 +1,27 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 
 #include <stdlib.h>
 #include <string.h>
@@ -377,3 +384,82 @@ sls_conf_base_t * sls_conf_get_root_conf()
 {
     return sls_first_conf.child;
 }
+
+
+static void sls_remove_marks(char * s) {
+    int len = strlen(s);
+    if (len < 2)//pair
+        return;
+
+    if ((s[0] == '\'' && s[len-1] == '\'')
+     || (s[0] == '"' && s[len-1] == '"')) {
+        for(int i=0; i < len-2; i ++) {
+            s[i] = s[i+1];
+        }
+        s[len-2] = 0x0;
+    }
+}
+
+int sls_parese_argv(int argc, char * argv[], sls_opt_t * sls_opt, sls_conf_cmd_t *conf_cmd_opt, int cmd_size)
+{
+    char opt_name[256] = {0};
+    char opt_value[256] = {0};
+    char temp[256] = {0};
+
+    int ret  = SLS_OK;
+    int i    = 1;//skip
+    int len  = cmd_size;
+
+    //special for '-h'
+    if (argc == 2) {
+        strcpy(temp, argv[1]);
+        sls_remove_marks(temp);
+        if (strcmp(temp, "-h") == 0) {
+            printf("option help info:\n");
+            for (i=0; i<len; i++) {
+                printf("-%s, %s, range: %.0f-%.0f.\n",
+                    conf_cmd_opt[i].name,
+                    conf_cmd_opt[i].mark,
+                    conf_cmd_opt[i].min,
+                    conf_cmd_opt[i].max);
+            }
+        } else {
+            printf("wrong parameter, '%s'.\n", argv[1]);
+        }
+        return SLS_ERROR;
+    }
+    while (i < argc) {
+        strcpy(temp, argv[i]);
+        len = strlen(temp);
+        if (len ==0) {
+        	printf("wrong parameter, is ''.");
+            ret = SLS_ERROR;
+            return ret;
+        }
+        sls_remove_marks(temp);
+        if (temp[0] != '-') {
+        	printf("wrong parameter '%s', the first character must be '-'.", opt_name);
+            ret = SLS_ERROR;
+            return ret;
+        }
+        strcpy(opt_name, temp + 1);
+
+        sls_conf_cmd_t * it = sls_conf_find(opt_name, conf_cmd_opt, cmd_size);
+        if (!it) {
+        	printf("wrong parameter '%s'.", argv[i]);
+            ret = SLS_ERROR;
+            return ret;
+        }
+        i ++;
+        strcpy(opt_value, argv[i++]);
+        sls_remove_marks(opt_value);
+        const char * r = it->set(opt_value, it, sls_opt);
+        if (r != SLS_CONF_OK) {
+        	printf("parameter set failed, %s, name='%s', value='%s'.", r, opt_name, opt_value);
+            ret = SLS_ERROR;
+            return ret;
+        }
+    }
+    return ret;
+}
+

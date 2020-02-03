@@ -1,20 +1,27 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 
 #include <errno.h>
 #include <string.h>
@@ -56,8 +63,8 @@ int CSLSRelay::uninit()
 	// for reconnect
 	if (NULL != m_relay_manager) {
 		((CSLSRelayManager*)m_relay_manager)->add_reconnect_stream(m_url);
-		sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::uninit, add_reconnect_stream.",
-				this);
+		sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::uninit, add_reconnect_stream, m_url=%s.",
+				this, m_url);
 	}
 
 	return CSLSRole::uninit();
@@ -182,10 +189,10 @@ int CSLSRelay::open(const char * srt_url) {
 
     int yes = 1;
     int no = 0;
-    char host_name[128] = "192.168.31.56";
+    char host_name[128] = "192.168.31.56";//test
     char server_ip[128] = "";
     int server_port = 8080;
-    char streamid[1024] = "uplive.sls.net/live/1234";
+    char streamid[1024] = "uplive.sls.net/live/1234";//test
     char url[1024] = {0};
     int latency = 10;
 
@@ -260,7 +267,7 @@ int CSLSRelay::open(const char * srt_url) {
     struct sockaddr *psa = (struct sockaddr *) &sa;
     status = srt_connect(fd, psa, sizeof sa);
     if (status == SRT_ERROR) {
-    	sls_log(SLS_LOG_ERROR, "[%p]CSLSRelay::open, inet_pton failure. server_ip=%s, server_port=%d.", this, server_ip, server_port);
+    	sls_log(SLS_LOG_ERROR, "[%p]CSLSRelay::open, srt_connect failure. server_ip=%s, server_port=%d.", this, server_ip, server_port);
         return SLS_ERROR;
     }
     m_srt = new CSLSSrt();

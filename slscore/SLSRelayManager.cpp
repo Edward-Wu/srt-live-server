@@ -1,20 +1,27 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 
 #include <errno.h>
 #include <string.h>
@@ -82,6 +89,7 @@ int CSLSRelayManager::connect(const char *url)
     cur_relay->init();
     ret = cur_relay->open(url);
     if (SLS_OK == ret) {
+    	cur_relay->set_idle_streams_timeout(m_sri->m_idle_streams_timeout);
     	ret = set_relay_param(cur_relay);
     	if (SLS_OK != ret) {
     		cur_relay->uninit();
@@ -102,7 +110,8 @@ int CSLSRelayManager::connect_hash()
 	//make hash to hostnames by stream_name
 	std::string url = get_hash_url();
 	char szURL[1024] = {0};
-	sprintf(szURL, "srt://%s/%s", url.c_str(), m_stream_name);
+	const char *szTmp = url.c_str();
+	sprintf(szURL, "srt://%s/%s", szTmp, m_stream_name);
 	int ret = connect(szURL);
 	if (SLS_OK != ret) {
 	    sls_log(SLS_LOG_INFO, "[%p]CSLSRelayManager::connect_hash, faild, connect szURL=%s, m_stream_name=%s.",

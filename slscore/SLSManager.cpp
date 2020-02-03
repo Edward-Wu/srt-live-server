@@ -1,20 +1,27 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 
 #include <errno.h>
 #include <string.h>
@@ -46,6 +53,8 @@ CSLSManager::CSLSManager()
     m_map_publisher  = NULL;
     m_map_puller     = NULL;
     m_map_pusher     = NULL;
+
+
 }
 
 CSLSManager::~CSLSManager()
@@ -57,12 +66,7 @@ int CSLSManager::start()
 	int ret = 0;
 	int i = 0;
 
-    //role list
-    m_list_role = new CSLSRoleList;
-    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, new m_list_role=%p.", this, m_list_role);
-
     //read config info from config file
-
     sls_conf_srt_t * conf_srt = (sls_conf_srt_t *)sls_conf_get_root_conf();
 
     if (!conf_srt) {
@@ -90,6 +94,10 @@ int CSLSManager::start()
     m_map_puller = new CSLSMapRelay[m_server_count];
     m_map_pusher = new CSLSMapRelay[m_server_count];
 
+    //role list
+    m_list_role = new CSLSRoleList;
+    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, new m_list_role=%p.", this, m_list_role);
+
     //create listeners according config, delete by groups
     for (i = 0; i < m_server_count; i ++) {
     	CSLSListener * p = new CSLSListener();//deleted by groups
@@ -107,7 +115,7 @@ int CSLSManager::start()
             sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, p->start failed.", this);
             return SLS_ERROR;
         }
-    	m_vector_server.push_back(p);
+    	m_servers.push_back(p);
     	conf = (sls_conf_server_t *)conf->sibling;
     }
     sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, init listeners, count=%d.", this, m_server_count);
@@ -124,7 +132,7 @@ int CSLSManager::start()
             sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, p->init_epoll failed.", this);
             return SLS_ERROR;
         }
-        m_vector_worker.push_back(p);
+        m_workers.push_back(p);
         m_single_group  =p;
 
     } else {
@@ -138,7 +146,7 @@ int CSLSManager::start()
                 return SLS_ERROR;
             }
             p->start();
-            m_vector_worker.push_back(p);
+            m_workers.push_back(p);
         }
     }
     sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, init worker, count=%d.", this, m_worker_threads);
@@ -166,9 +174,22 @@ int CSLSManager::stop()
 	int ret = 0;
 	int i = 0;
     //stop groups
-    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::stop, release worker, count=%d.", this, m_vector_worker.size());
-    for(i = 0; i < m_vector_worker.size(); i ++) {
-    	CSLSGroup *p = m_vector_worker[i];
+    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::stop, release worker, count=%d.", this, m_workers.size());
+
+    //stop all listeners
+    std::list<CSLSListener *>::iterator it;
+    for ( it = m_servers.begin(); it != m_servers.end(); it++) {
+    	CSLSListener *server = *it;
+    	if (NULL == server) {
+    		continue;
+    	}
+    	server->uninit();
+    }
+    m_servers.clear();
+
+    std::list<CSLSGroup *>::iterator it_worker;
+    for ( it_worker = m_workers.begin(); it_worker != m_workers.end(); it_worker++) {
+    	CSLSGroup *p = *it_worker;
     	if (p) {
     		p->stop();
     		p->uninit_epoll();
@@ -176,7 +197,7 @@ int CSLSManager::stop()
     		p = NULL;
     	}
     }
-    m_vector_worker.clear();
+    m_workers.clear();
 
     if (m_map_data) {
     	delete[] m_map_data;
@@ -210,10 +231,56 @@ int CSLSManager::stop()
 
 int CSLSManager::reload()
 {
-	//close all old listeners, not to accept new client
+    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::reload begin.", this);
 
-	//start new listeners
+    //stop all listeners
+    std::list<CSLSListener *>::iterator it;
+    for ( it = m_servers.begin(); it != m_servers.end(); it++) {
+    	CSLSListener *server = *it;
+    	if (NULL == server) {
+    		continue;
+    	}
+    	server->uninit();
+    }
+    m_servers.clear();
 
+    //set all groups reload flag
+    std::list<CSLSGroup *>::iterator it_worker;
+    for ( it_worker = m_workers.begin(); it_worker != m_workers.end(); it_worker++) {
+    	CSLSGroup *worker = *it_worker;
+    	if (worker) {
+    		worker->reload();
+    	}
+    }
 	return 0;
 }
+
+int  CSLSManager::check_invalid()
+{
+    std::list<CSLSGroup *>::iterator it;
+    std::list<CSLSGroup *>::iterator it_erase;
+    std::list<CSLSGroup *>::iterator it_end = m_workers.end();
+    for ( it = m_workers.begin(); it != it_end; ) {
+    	CSLSGroup *worker = *it;
+    	it_erase = it;
+    	it++;
+    	if (NULL == worker) {
+			m_workers.erase(it_erase);
+			continue;
+    	}
+		if (worker->is_exit()) {
+			sls_log(SLS_LOG_INFO, "[%p]CSLSManager::check_invalid, delete worker=%p.",
+					this, worker);
+			worker->stop();
+			worker->uninit_epoll();
+			delete worker;
+            m_workers.erase(it_erase);
+		}
+    }
+
+    if (m_workers.size() == 0)
+        return SLS_OK;
+    return SLS_ERROR;
+}
+
 

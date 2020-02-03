@@ -1,20 +1,27 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 
 #include <errno.h>
 #include <string.h>
@@ -45,9 +52,12 @@ CSLSListener::CSLSListener()
     m_list_role     = NULL;
     m_map_publisher = NULL;
     m_map_puller    = NULL;
+    m_idle_streams_timeout      = UNLIMITED_TIMEOUT;
+    m_idle_streams_timeout_role = 0;
 
     sprintf(m_role_name, "listener");
 }
+
 CSLSListener::~CSLSListener()
 {
 }
@@ -60,6 +70,7 @@ int CSLSListener::init()
 
 int CSLSListener::uninit()
 {
+	CSLSLock lock(&m_mutex);
     stop();
     return CSLSRole::uninit();
 }
@@ -99,16 +110,21 @@ int CSLSListener::init_conf_app()
         return SLS_ERROR;
     }
 
+    if (NULL == m_map_pusher) {
+        sls_log(SLS_LOG_ERROR, "[%p]CSLSListener::init_conf_app failed, m_map_pusher is null.", this);
+        return SLS_ERROR;
+    }
+
     if (!m_conf) {
         sls_log(SLS_LOG_ERROR, "[%p]CSLSListener::init_conf_app failed, conf is null.", this);
         return SLS_ERROR;
     }
     conf_server = (sls_conf_server_t *)m_conf;
 
-    m_back_log              = conf_server->backlog;
-    m_idle_streams_timeout  = conf_server->idle_streams_timeout;
+    m_back_log                   = conf_server->backlog;
+    m_idle_streams_timeout_role  = conf_server->idle_streams_timeout;
     sls_log(SLS_LOG_INFO, "[%p]CSLSListener::init_conf_app, m_back_log=%d, m_idle_streams_timeout=%d.",
-            this, m_back_log, m_idle_streams_timeout);
+            this, m_back_log, m_idle_streams_timeout_role);
 
     //domain
     domain_players = sls_conf_string_split(string(conf_server->domain_player), string(" "));
@@ -255,15 +271,9 @@ int CSLSListener::start()
 
 int CSLSListener::stop()
 {
-	int ret = 0;
+	int ret = SLS_OK;
     sls_log(SLS_LOG_INFO, "[%p]CSLSListener::stop.", this);
-/*
-    if (NULL != m_puller_manager) {
-    	m_puller_manager->stop();
-    	delete m_puller_manager;
-    	m_puller_manager = NULL;
-    }
-    */
+
  	return ret;
 }
 
@@ -396,7 +406,7 @@ int CSLSListener::handler()
 
 		CSLSPlayer * player = new CSLSPlayer;
 		player->init();
-		player->set_idle_streams_timeout(m_idle_streams_timeout);
+		player->set_idle_streams_timeout(m_idle_streams_timeout_role);
 		player->set_srt(srt);
 		player->set_map_data(key_stream_name, m_map_data);
 
@@ -431,6 +441,7 @@ int CSLSListener::handler()
 	pub->set_srt(srt);
 	pub->set_conf(ca);
 	pub->init();
+	pub->set_idle_streams_timeout(m_idle_streams_timeout_role);
 	sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, new pub=%p, key_stream_name=%s.",
 			this, pub, key_stream_name);
 
@@ -469,6 +480,7 @@ int CSLSListener::handler()
 		return client_count;
 	}
 	pusher_manager->set_map_data(m_map_data);
+	pusher_manager->set_map_publisher(m_map_publisher);
 	pusher_manager->set_role_list(m_list_role);
 
 	if (SLS_OK != pusher_manager->start()) {

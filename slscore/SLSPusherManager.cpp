@@ -1,20 +1,27 @@
-/*
- * This file is part of SLS Live Server.
+
+/**
+ * The MIT License (MIT)
  *
- * SLS Live Server is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Copyright (c) 2019-2020 Edward.Wu
  *
- * SLS Live Server is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with SLS Live Server;
- * if not, please contact with the author: Edward.Wu(edward_email@126.com)
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
 
 #include <errno.h>
 #include <string.h>
@@ -49,7 +56,8 @@ int CSLSPusherManager::connect_all()
 	int all_ret = SLS_OK;
 	for (int i = 0; i < m_sri->m_upstreams.size(); i ++) {
 		char szURL[1024] = {0};
-		sprintf(szURL, "srt://%s/%s", m_sri->m_upstreams[i].c_str(), m_stream_name);
+		const char *szTmp = m_sri->m_upstreams[i].c_str();
+		sprintf(szURL, "srt://%s/%s", szTmp, m_stream_name);
 		ret = connect(szURL);
 		if (SLS_OK != ret) {
 		    CSLSLock lock(&m_rwclock, true);
@@ -67,6 +75,18 @@ int CSLSPusherManager::start()
 	    sls_log(SLS_LOG_INFO, "[%p]CSLSPusherManager::start, failed, m_upstreams.size()=0, m_app_uplive=%s, m_stream_name=%s.",
 	    		this, m_app_uplive, m_stream_name);
 		return ret;
+	}
+
+	//check publisher
+	char key_stream_name[1024] = {0};
+	sprintf(key_stream_name, "%s/%s", m_app_uplive, m_stream_name);
+	if (NULL != m_map_publisher) {
+	    CSLSRole * publisher = m_map_publisher->get_publisher(key_stream_name);
+	    if (NULL == publisher) {
+	        sls_log(SLS_LOG_INFO, "[%p]CSLSPullerManager::start, failed, key_stream_name=%s, publisher=NULL not exist.",
+	    		this, key_stream_name);
+	        return ret;
+	    }
 	}
 
 	if (SLS_PM_ALL == m_sri->m_mode) {
@@ -137,14 +157,30 @@ int CSLSPusherManager::reconnect(int64_t cur_tm_ms)
 		return ret;
 	}
 
+	//check publisher
+    bool no_publisher = false;
+	char key_stream_name[1024] = {0};
+	sprintf(key_stream_name, "%s/%s", m_app_uplive, m_stream_name);
+	if (NULL != m_map_publisher) {
+	    CSLSRole * publisher = m_map_publisher->get_publisher(key_stream_name);
+	    if (NULL == publisher) {
+	        no_publisher = true;
+	    }
+	}
+
 	if (SLS_PM_ALL == m_sri->m_mode) {
-		ret = reconnect_all(cur_tm_ms);
+		ret = reconnect_all(cur_tm_ms, no_publisher);
 		return ret;
 	} else if (SLS_PM_HASH == m_sri->m_mode) {
 		if (cur_tm_ms - m_reconnect_begin_tm < (m_sri->m_reconnect_interval * 1000)) {
 			return ret;
 		}
 		m_reconnect_begin_tm = cur_tm_ms;
+		if (no_publisher) {
+	        sls_log(SLS_LOG_INFO, "[%p]CSLSPullerManager::reconnect, connect_hash failed, key_stream_name=%s, publisher=NULL not exist.",
+	    		this, key_stream_name);
+			return ret;
+		}
 		ret = connect_hash();
 	} else {
 	    sls_log(SLS_LOG_INFO, "[%p]CSLSPusherManager::reconnect, failed, wrong m_sri->m_mode=%d, m_app_uplive=%s, m_stream_name=%s.",
@@ -169,20 +205,29 @@ int CSLSPusherManager::check_relay_param()
     return SLS_OK;
 }
 
-int CSLSPusherManager::reconnect_all(int64_t cur_tm_ms)
+int CSLSPusherManager::reconnect_all(int64_t cur_tm_ms, bool no_publisher)
 {
     CSLSLock lock(&m_rwclock, true);
 
     int ret = SLS_ERROR;
     int all_ret = SLS_OK;
-    std::map<std::string, int64_t>::iterator it_rease;
+    std::map<std::string, int64_t>::iterator it_cur;
     std::map<std::string, int64_t>::iterator it;
     for(it=m_map_reconnect_relay.begin(); it!=m_map_reconnect_relay.end();) {
         std::string url = it->first;
         int64_t begin_tm = it->second;
+        it_cur = it;
+        it ++;
         if (cur_tm_ms - begin_tm < (m_sri->m_reconnect_interval * 1000)) {
-        	it ++;
         	all_ret |= ret;
+        	continue;
+        }
+        if (no_publisher) {
+        	//it_cur->second = cur_tm_ms；
+        	all_ret |= ret;
+    	    m_map_reconnect_relay[url] = cur_tm_ms;
+	        sls_log(SLS_LOG_INFO, "[%p]CSLSPullerManager::reconnect_all, failed, url=%s, publisher=NULL not exist.",
+	    		this, url.c_str());
         	continue;
         }
     	ret = connect(url.c_str());
@@ -191,11 +236,9 @@ int CSLSPusherManager::reconnect_all(int64_t cur_tm_ms)
     	    		this, url.c_str());
     	    m_map_reconnect_relay[url] = cur_tm_ms;
     	} else {
-    		it_rease = it;
-    		it ++;
-            sls_log(SLS_LOG_INFO, "[%p]CSLSRelayManager::reconnect_all, ok, connect url='%s', erase item.",
+            sls_log(SLS_LOG_INFO, "[%p]CSLSRelayManager::reconnect_all, ok, connect url='%s', erase item from m_map_reconnect_relay.",
         		    this, url.c_str());
-            m_map_reconnect_relay.erase(it_rease);
+            m_map_reconnect_relay.erase(it_cur);
     	}
     	all_ret |= ret;
     }
