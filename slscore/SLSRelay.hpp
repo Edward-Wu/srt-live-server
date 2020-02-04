@@ -53,7 +53,7 @@ SLS_SET_CONF(relay, string, type,                 "pull, push",  1, 31),
 SLS_SET_CONF(relay, string, mode,                 "relay mode.", 1, 31),
 SLS_SET_CONF(relay, string, upstreams,            "upstreams",   1, 1023),
 SLS_SET_CONF(relay, int,    reconnect_interval,   "reconnect interval, unit s", 1, 3600),
-SLS_SET_CONF(relay, int,    idle_streams_timeout, "idle streams timeout, only for pull, unit s", -1, 3600),
+SLS_SET_CONF(relay, int,    idle_streams_timeout, "idle streams timeout, unit s", -1, 3600),
 
 SLS_CONF_CMD_DYNAMIC_DECLARE_END
 
