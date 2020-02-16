@@ -34,6 +34,45 @@
 #include "SLSPullerManager.hpp"
 #include "SLSPusherManager.hpp"
 
+const char SLS_SERVER_STAT_INFO_BASE[] = "\
+{\
+\"port\": \"%d\",\
+\"role\": \"%s\",\
+\"pub_domain_app\": \"\",\
+\"stream_name\": \"\",\
+\"url\": \"\",\
+\"remote_ip\": \"\",\
+\"remote_port\": \"\",\
+\"start_time\": \"%s\",\
+\"kbitrate\": \"0\"\
+}";
+
+const char SLS_PUBLISHER_STAT_INFO_BASE[] = "\
+{\
+\"port\": \"%d\",\
+\"role\": \"%s\",\
+\"pub_domain_app\": \"%s\",\
+\"stream_name\": \"%s\",\
+\"url\": \"%s\",\
+\"remote_ip\": \"%s\",\
+\"remote_port\": \"%d\",\
+\"start_time\": \"%s\",\
+\"kbitrate\":\
+";
+
+const char SLS_PLAYER_STAT_INFO_BASE[] = "\
+{\
+\"port\": \"%d\",\
+\"role\": \"%s\",\
+\"pub_domain_app\": \"%s\",\
+\"stream_name\": \"%s\",\
+\"url\": \"%s\",\
+\"remote_ip\": \"%s\",\
+\"remote_port\": \"%d\",\
+\"start_time\": \"%s\",\
+\"kbitrate\":\
+";
+
 /**
  * server conf
  */
@@ -48,12 +87,15 @@ CSLSListener::CSLSListener()
     m_conf      = NULL;
     m_back_log  = 1024;
     m_is_write  = 0;
+    m_port      = 0;
 
     m_list_role     = NULL;
     m_map_publisher = NULL;
     m_map_puller    = NULL;
     m_idle_streams_timeout      = UNLIMITED_TIMEOUT;
     m_idle_streams_timeout_role = 0;
+    m_stat_info = std::string("");
+    memset(m_http_url_role, 0, URL_MAX_LEN);
 
     sprintf(m_role_name, "listener");
 }
@@ -123,6 +165,7 @@ int CSLSListener::init_conf_app()
 
     m_back_log                   = conf_server->backlog;
     m_idle_streams_timeout_role  = conf_server->idle_streams_timeout;
+    strcpy(m_http_url_role, conf_server->on_event_url);
     sls_log(SLS_LOG_INFO, "[%p]CSLSListener::init_conf_app, m_back_log=%d, m_idle_streams_timeout=%d.",
             this, m_back_log, m_idle_streams_timeout_role);
 
@@ -217,7 +260,7 @@ int CSLSListener::start()
     std::string strUpliveDomain;
 
 
-	if (!m_conf) {
+	if (NULL == m_conf) {
 	    sls_log(SLS_LOG_ERROR, "[%p]CSLSListener::start failed, conf is null.", this);
 	    return SLS_ERROR;
 	}
@@ -233,8 +276,8 @@ int CSLSListener::start()
     if (NULL == m_srt)
         m_srt = new CSLSSrt();
 
-    int port = ((sls_conf_server_t*)m_conf)->listen;
-    ret = m_srt->libsrt_setup(port);
+    m_port = ((sls_conf_server_t*)m_conf)->listen;
+    ret = m_srt->libsrt_setup(m_port);
     if (SLS_OK != ret) {
         sls_log(SLS_LOG_ERROR, "[%p]CSLSListener::start, libsrt_setup failure.", this);
         return ret;
@@ -285,13 +328,13 @@ int CSLSListener::handler()
 	CSLSSrt *srt = NULL;
 	char sid[1024] = {0};
 	int  sid_size = sizeof(sid);
-	char host_name[1024] = {0};
-	char app_name[1024] = {0};
-	char stream_name[1024] = {0};
-	char key_app[1024] = {0};
-	char key_stream_name[1024] = {0};
-    char tmp[1024] = {0};
-    char peer_name[256] = {0};
+	char host_name[URL_MAX_LEN] = {0};
+	char app_name[URL_MAX_LEN] = {0};
+	char stream_name[URL_MAX_LEN] = {0};
+	char key_app[URL_MAX_LEN] = {0};
+	char key_stream_name[URL_MAX_LEN] = {0};
+    char tmp[URL_MAX_LEN] = {0};
+    char peer_name[IP_MAX_LEN] = {0};
     int  peer_port = 0;
     int  client_count = 0;
 
@@ -339,6 +382,9 @@ int CSLSListener::handler()
     std::string app_uplive = "";
     sls_conf_app_t * ca = NULL;
 
+    char cur_time[STR_DATE_TIME_LEN] = {0};
+    sls_gettime_default_string(cur_time);
+
     //3.is player?
     app_uplive = m_map_publisher->get_uplive(key_app);
     if (app_uplive.length() > 0) {
@@ -366,26 +412,27 @@ int CSLSListener::handler()
         	puller_manager->set_map_data(m_map_data);
         	puller_manager->set_map_publisher(m_map_publisher);
         	puller_manager->set_role_list(m_list_role);
+        	puller_manager->set_listen_port(m_port);
 
         	if (SLS_OK != puller_manager->start()) {
-    			sls_log(SLS_LOG_WARNING, "[%p]CSLSListener::handler, puller_manager->start failed, new client[%s:%d], stream='%s'.",
+    			sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, puller_manager->start failed, new client[%s:%d], stream='%s'.",
     						this, peer_name, peer_port, key_stream_name);
     			srt->libsrt_close();
     			delete srt;
     			return client_count;
             }
-    	    sls_log(SLS_LOG_WARNING, "[%p]CSLSListener::handler, puller_manager->start ok, new client[%s:%d], stream=%s.",
+    	    sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, puller_manager->start ok, new client[%s:%d], stream=%s.",
 	            this, peer_name, peer_port, key_stream_name);
 
     	    pub = m_map_publisher->get_publisher(key_stream_name);
             if (NULL == pub) {
-        	    sls_log(SLS_LOG_WARNING, "[%p]CSLSListener::handler, m_map_publisher->get_publisher failed, new client[%s:%d], stream=%s.",
+        	    sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, m_map_publisher->get_publisher failed, new client[%s:%d], stream=%s.",
     	            this, peer_name, peer_port, key_stream_name);
     			srt->libsrt_close();
     			delete srt;
     			return client_count;
             } else {
-        	    sls_log(SLS_LOG_WARNING, "[%p]CSLSListener::handler, m_map_publisher->get_publisher ok, pub=%p, new client[%s:%d], stream=%s.",
+        	    sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, m_map_publisher->get_publisher ok, pub=%p, new client[%s:%d], stream=%s.",
     	            this, pub, peer_name, peer_port, key_stream_name);
             }
         }
@@ -409,6 +456,13 @@ int CSLSListener::handler()
 		player->set_idle_streams_timeout(m_idle_streams_timeout_role);
 		player->set_srt(srt);
 		player->set_map_data(key_stream_name, m_map_data);
+		//stat info
+	    sprintf(tmp, SLS_PLAYER_STAT_INFO_BASE,
+	    		m_port, player->get_role_name(), app_uplive.c_str(), stream_name, sid, peer_name, peer_port, cur_time);
+	    std::string stat_info = std::string(tmp);
+	    player->set_stat_info_base(stat_info);
+	    player->set_http_url(m_http_url_role);
+	    player->on_connect();
 
 		m_list_role->push(player);
 		sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, new player[%p]=[%s:%d], key_stream_name=%s, %s=%p, m_list_role->size=%d.",
@@ -442,6 +496,13 @@ int CSLSListener::handler()
 	pub->set_conf(ca);
 	pub->init();
 	pub->set_idle_streams_timeout(m_idle_streams_timeout_role);
+	//stat info
+    sprintf(tmp, SLS_PUBLISHER_STAT_INFO_BASE,
+    		m_port, pub->get_role_name(), app_uplive.c_str(), stream_name, sid, peer_name, peer_port, cur_time);
+    std::string stat_info = std::string(tmp);
+    pub->set_stat_info_base(stat_info);
+    pub->set_http_url(m_http_url_role);
+
 	sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, new pub=%p, key_stream_name=%s.",
 			this, pub, key_stream_name);
 
@@ -465,6 +526,7 @@ int CSLSListener::handler()
 	}
 	pub->set_map_publisher(m_map_publisher);
 	pub->set_map_data(key_stream_name, m_map_data);
+	pub->on_connect();
 	m_list_role->push(pub);
 	sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, new publisher[%s:%d], key_stream_name=%s.",
 			this, peer_name, peer_port, key_stream_name);
@@ -482,6 +544,7 @@ int CSLSListener::handler()
 	pusher_manager->set_map_data(m_map_data);
 	pusher_manager->set_map_publisher(m_map_publisher);
 	pusher_manager->set_role_list(m_list_role);
+	pusher_manager->set_listen_port(m_port);
 
 	if (SLS_OK != pusher_manager->start()) {
 		sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, pusher_manager->start failed, new role[%s:%d], key_stream_name=%s.",
@@ -490,6 +553,17 @@ int CSLSListener::handler()
 	return client_count;
 }
 
+std::string   CSLSListener::get_stat_info()
+{
+	if (m_stat_info.length() == 0) {
+	    char tmp[STR_MAX_LEN] = {0};
+	    char cur_time[STR_DATE_TIME_LEN] = {0};
+	    sls_gettime_default_string(cur_time);
+	    sprintf(tmp, SLS_SERVER_STAT_INFO_BASE, m_port, m_role_name, cur_time);
+	    m_stat_info = std::string(tmp);
+	}
+	return m_stat_info;
+}
 
 
 

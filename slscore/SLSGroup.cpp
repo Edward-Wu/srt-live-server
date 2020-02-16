@@ -42,6 +42,9 @@ CSLSGroup::CSLSGroup()
     m_worker_connections = 100;
     m_worker_number      = 0;
     m_reload             = false;
+
+    m_stat_post_last_tm_ms = sls_gettime_ms();
+    m_stat_post_interval   = 5;//5s default
 }
 
 CSLSGroup::~CSLSGroup()
@@ -52,7 +55,6 @@ int CSLSGroup::start()
 {
     sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::start, worker_number=%d.", this, m_worker_number);
 	//do something here
-
     return CSLSEpollThread::start();
 
 }
@@ -60,9 +62,21 @@ int CSLSGroup::start()
 int CSLSGroup::stop()
 {
 	int ret = 0;
-    sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::stop, worker_number=%d.", this,m_worker_number);
+    sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::stop, worker_number=%d.", this, m_worker_number);
 	ret = CSLSEpollThread::stop();
 
+	std::list<CSLSRole * >::iterator it_erase;
+    for (std::list<CSLSRole * >::iterator it = m_list_wait_http_role.begin(); it != m_list_wait_http_role.end();)
+    {
+        CSLSRole * role = *it;
+        if (role) {
+        	role->uninit();
+            delete role;
+        }
+        it ++;
+    }
+    m_list_wait_http_role.clear();
+    sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::stop, m_list_wait_http_role.clear, worker_number=%d.", this, m_worker_number);
 	return ret;
 }
 
@@ -130,7 +144,7 @@ int CSLSGroup::handler()
             ret = CSLSSrt::libsrt_neterrno();
 
     	idle_check();
-        return ret;
+        return handler_count;
     }
 
     sls_log(SLS_LOG_TRACE, "[%p]CSLSGroup::handle, worker_number=%d, writable sock count=%d, readable sock count=%d.",
@@ -193,19 +207,44 @@ int CSLSGroup::handler()
     	//release cpu
         msleep(POLLING_TIME);
     }
-	return SLS_OK;
+	return handler_count;
 }
 
 void CSLSGroup::idle_check()
 {
+	check_wait_http_role();
 	check_reconnect_relay();
     check_invalid_sock();
     check_new_role();
 }
 
+void CSLSGroup::check_wait_http_role()
+{
+    std::list<CSLSRole *>::iterator it;
+    std::list<CSLSRole *>::iterator it_erase;
+    for(it=m_list_wait_http_role.begin(); it!=m_list_wait_http_role.end();) {
+        CSLSRole * role = *it;
+		it_erase = it;
+		it ++;
+        if (!role) {
+        	m_list_wait_http_role.erase(it_erase);
+            continue;
+        }
+        if (SLS_ERROR == role->check_http_client()){
+			sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_wait_http_role, worker_number=%d, delete %s=%p.",
+					this, m_worker_number, role->get_role_name(), role);
+        	role->uninit();
+        	delete role;
+        	m_list_wait_http_role.erase(it_erase);
+        } else {
+           role->handler();
+        }
+    }
+}
+
 void CSLSGroup::check_reconnect_relay()
 {
-	int64_t cur_time_microsec = sls_gettime_relative();//m_cur_time_microsec;
+	int64_t cur_time_ms = sls_gettime_ms();//m_cur_time_microsec;
 
 	CSLSRelayManager * relay_manager = NULL;
     std::list<CSLSRelayManager * >::iterator it_erase;
@@ -215,13 +254,14 @@ void CSLSGroup::check_reconnect_relay()
     	CSLSRelayManager * relay_manager = *it;
         if (NULL == relay_manager)
         {
-			sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_reconnect_relay, worker_number=%d, remove invalid relay_manager.", this);
+			sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_reconnect_relay, worker_number=%d, remove invalid relay_manager.",
+					this, m_worker_number);
     		it_erase = it;
     		it ++;
     		m_list_reconnect_relay_manager.erase(it_erase);
         	continue;
         }
-        int ret = relay_manager->reconnect(cur_time_microsec/1000);
+        int ret = relay_manager->reconnect(cur_time_ms);
         if (SLS_OK != ret) {
         	it ++;
         	continue;
@@ -234,20 +274,36 @@ void CSLSGroup::check_reconnect_relay()
 
 void CSLSGroup::check_invalid_sock()
 {
-	int64_t cur_time_microsec = sls_gettime_relative();//m_cur_time_microsec;
+	bool update_stat_info = false;
+	int64_t cur_time_ms = sls_gettime_ms();
+	int d = cur_time_ms - m_stat_post_last_tm_ms;
+	if (d >= m_stat_post_interval*1000) {
+		update_stat_info = true;
+		m_stat_info.clear();
+		m_stat_post_last_tm_ms = cur_time_ms ;
+	}
+
     std::map<int, CSLSRole *>::iterator it;
     std::map<int, CSLSRole *>::iterator it_erase;
     for(it=m_map_role.begin(); it!=m_map_role.end();) {
         CSLSRole * role = it->second;
+		it_erase = it;
+		it ++;
         if (!role) {
-            it ++;
+			m_map_role.erase(it_erase);
             continue;
         }
 
-        int state = role->get_state(cur_time_microsec);
+        if (update_stat_info) {
+            std::string stat_info = role->get_stat_info();
+            CSLSLock lock(&m_mutex_stat);
+            m_stat_info.append(stat_info);
+        }
+
+        int state = role->get_state(cur_time_ms);
         if (SLS_RS_INVALID == state || SLS_RS_UNINIT == state)
 		{
-			sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, delete %s=%p, invalid sock=%d, state=%d, role_map.size=%d.",
+			sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, %s=%p, invalid sock=%d, state=%d, role_map.size=%d.",
 				  this, m_worker_number, role->get_role_name(), role, role->get_fd(), state, m_map_role.size());
 			//check relay
 			if (role->is_reconnect()) {
@@ -259,13 +315,18 @@ void CSLSGroup::check_invalid_sock()
 			}
 
 			role->uninit();
-			delete role;
-			it_erase = it;
-			it ++;
+			if (SLS_OK == role->check_http_client()) {
+				m_list_wait_http_role.push_back(role);
+				sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, %s=%p, put into m_list_wait_http_role.",
+					  this, m_worker_number, role->get_role_name(), role);
+			} else {
+				sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::check_invalid_sock, worker_number=%d, %s=%p, delete.",
+					  this, m_worker_number, role->get_role_name(), role);
+			    delete role;
+			}
 			m_map_role.erase(it_erase);
 			continue;
 		}
-		it ++;
     }
 }
 
@@ -277,8 +338,8 @@ void CSLSGroup::clear()
     for(it=m_map_role.begin(); it!=m_map_role.end(); it++) {
         CSLSRole * role = it->second;
         if (role) {
-            sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::clear, worker_number=%d, delete role=%p.",
-                    this, m_worker_number, role);
+            sls_log(SLS_LOG_INFO, "[%p]CSLSGroup::clear, worker_number=%d, delete %s=%p.",
+                    this, m_worker_number, role->get_role_name(), role);
             role->uninit();
             delete role;
         }
@@ -299,6 +360,17 @@ void CSLSGroup::set_worker_number(int n)
 void CSLSGroup::set_worker_connections(int n)
 {
     m_worker_connections = n;
+}
+
+void CSLSGroup::set_stat_post_interval(int interval)
+{
+    m_stat_post_interval = interval;
+}
+
+void CSLSGroup::get_stat_info(std::string &info)
+{
+    CSLSLock lock(&m_mutex_stat);
+    info.append(m_stat_info);
 }
 
 

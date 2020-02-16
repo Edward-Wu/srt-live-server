@@ -31,6 +31,7 @@ using namespace std;
 
 #include "SLSLog.hpp"
 #include "SLSManager.hpp"
+#include "HttpClient.hpp"
 
 /*
  * ctrl + c controller
@@ -52,7 +53,7 @@ static void reload_handler(int s){
  * usage information
  */
 #define SLS_MAJOR_VERSION "1"
-#define SLS_MIN_VERSION "2"
+#define SLS_MIN_VERSION "4"
 #define SLS_TEST_VERSION "x"
 static void usage()
 {
@@ -77,11 +78,16 @@ int main(int argc, char* argv[])
     struct sigaction    sigHupHandler;
     sls_opt_t           sls_opt;
 
-    CSLSManager               *sls_manager = NULL;
+    CSLSManager             *sls_manager = NULL;
     std:list <CSLSManager*>  reload_manager_list;
+    CHttpClient             *http_stat_client = new CHttpClient;
 
     int ret = SLS_OK;
     int l = sizeof(sockaddr_in);
+    int64_t tm_begin_ms = 0;
+
+    char stat_method[]        = "POST";
+    sls_conf_srt_t * conf_srt = NULL;
 
     usage();
 
@@ -90,7 +96,7 @@ int main(int argc, char* argv[])
     if (argc > 1) {
         //parset argv
     	int cmd_size = sizeof(conf_cmd_opt)/sizeof(sls_conf_cmd_t);
-        ret = sls_parese_argv(argc, argv, &sls_opt, conf_cmd_opt, cmd_size);
+        ret = sls_parse_argv(argc, argv, &sls_opt, conf_cmd_opt, cmd_size);
         if (ret!= SLS_OK) {
             CSLSLog::destory_instance();
             return SLS_ERROR;
@@ -132,42 +138,49 @@ int main(int argc, char* argv[])
     ret = sls_conf_open(sls_opt.conf_file_name);
     if (ret!= SLS_OK) {
         sls_log(SLS_LOG_INFO, "sls_conf_open failed, EXIT!");
-
-        CSLSSrt::libsrt_uninit();
-        sls_conf_close();
-        CSLSLog::destory_instance();
-        return SLS_ERROR;
+        goto EXIT_PROC;
     }
 
     if (0 != sls_write_pid(getpid())) {
         sls_log(SLS_LOG_INFO, "sls_write_pid failed, EXIT!");
-
-        CSLSSrt::libsrt_uninit();
-        sls_conf_close();
-        CSLSLog::destory_instance();
-    	return SLS_ERROR;
+        goto EXIT_PROC;
     }
     //sls manager
-    sls_manager = new CSLSManager;
+    sls_log(SLS_LOG_INFO, "\nsrt live server is running...");
+
+    sls_manager  = new CSLSManager;
     if (SLS_OK != sls_manager->start()) {
         sls_log(SLS_LOG_INFO, "sls_manager->start failed, EXIT!");
-
-        sls_manager->stop();
-        delete sls_manager;
-        CSLSSrt::libsrt_uninit();
-        sls_conf_close();
-        CSLSLog::destory_instance();
-        return SLS_ERROR;
+        goto EXIT_PROC;
     }
 
-    sls_log(SLS_LOG_INFO, "\nsrt live server is running...");
-	int64_t tm = sls_gettime();
+    conf_srt = (sls_conf_srt_t *)sls_conf_get_root_conf();
+    if (strlen(conf_srt->stat_post_url) > 0)
+        http_stat_client->open(conf_srt->stat_post_url, stat_method, conf_srt->stat_post_interval);
+
 	while(!b_exit)
 	{
-		if (sls_manager->is_single_thread())
-			sls_manager->single_thread_handler();
-		else
-			msleep(40);
+		int64_t cur_tm_ms = sls_gettime_ms();
+		ret = 0;
+		if (sls_manager->is_single_thread()) {
+			ret = sls_manager->single_thread_handler();
+		}
+		if (NULL != http_stat_client) {
+			if (!http_stat_client->is_valid()) {
+				if (SLS_OK == http_stat_client->check_repeat(cur_tm_ms)) {
+					http_stat_client->reopen();
+				}
+			}
+			ret = http_stat_client->handler();
+			if (SLS_OK == http_stat_client->check_finished() ||
+				SLS_OK == http_stat_client->check_timeout(cur_tm_ms)) {
+				//http_stat_client->get_response_info();
+				http_stat_client->close();
+			}
+
+		}
+
+		msleep(10);
 
 		/*for test reload...
 		int64_t tm_cur = sls_gettime();
@@ -224,19 +237,23 @@ int main(int argc, char* argv[])
                 sls_log(SLS_LOG_INFO, "reload, failed, sls_manager->start, exit.");
                 break;
             }
+            if (strlen(conf_srt->stat_post_url) > 0)
+                http_stat_client->open(conf_srt->stat_post_url, stat_method, conf_srt->stat_post_interval);
             sls_log(SLS_LOG_INFO, "reload successfully.");
 		}
 	}
 
-
+EXIT_PROC:
     sls_log(SLS_LOG_INFO, "exit, stop srt live server...");
-	//stop
+
+	//stop srt
     if (NULL != sls_manager) {
         sls_manager->stop();
         delete sls_manager;
         sls_manager = NULL;
         sls_log(SLS_LOG_INFO, "exit, release sls_manager ok.");
     }
+
     //release all reload manager
     sls_log(SLS_LOG_INFO, "exit, release reload_manager_list begin，count=%d.", reload_manager_list.size());
     std::list<CSLSManager *>::iterator it;
@@ -252,13 +269,24 @@ int main(int argc, char* argv[])
     sls_log(SLS_LOG_INFO, "exit, release reload_manager_list ok.");
     reload_manager_list.clear();
 
+    sls_log(SLS_LOG_INFO, "exit, release http_stat_client.");
+    //release http_stat_client
+    if (NULL != http_stat_client) {
+    	http_stat_client->close();
+    	delete http_stat_client;
+    	http_stat_client = NULL;
+    }
+
+    sls_log(SLS_LOG_INFO, "exit, uninit srt .");
     //uninit srt
     CSLSSrt::libsrt_uninit();
 
+    sls_log(SLS_LOG_INFO, "exit, close conf.");
     sls_conf_close();
     CSLSLog::destory_instance();
 
     sls_remove_pid();
+
     sls_log(SLS_LOG_INFO, "exit, bye bye!");
 
     return 0;

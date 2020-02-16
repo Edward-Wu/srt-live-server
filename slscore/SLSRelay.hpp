@@ -78,15 +78,17 @@ public :
     void  set_map_publisher(CSLSMapPublisher *publisher);
     void  set_relay_manager(void *relay_manager);
     void *get_relay_manager();
-
-    int   open(const char *url);
-    int   close();
-
     char *get_url();
 
+    int           open(const char *url);
+    virtual int   close();
+    virtual int   get_peer_info(char *peer_name, int &peer_port);
+    virtual int   get_stat_base(char *stat_base) ;
 protected:
-    char         m_url[1024];
-    char         m_upstream[1024];
+    char         m_url[URL_MAX_LEN];
+    char         m_upstream[URL_MAX_LEN];
+    char         m_server_ip[IP_MAX_LEN];
+    int          m_server_port;
 
     CSLSMapPublisher  *m_map_publisher;
     void              *m_relay_manager;

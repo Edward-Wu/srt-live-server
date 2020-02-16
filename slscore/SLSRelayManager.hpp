@@ -62,6 +62,7 @@ public :
 
     void set_relay_conf(SLS_RELAY_INFO *sri);
     void set_relay_info(const char *app_uplive, const char *stream_name);
+    void set_listen_port(int port);
 
 protected:
     CSLSMapPublisher    *m_map_publisher ;
@@ -69,6 +70,7 @@ protected:
     CSLSRoleList        *m_role_list;
     SLS_RELAY_INFO      *m_sri;
     int64_t              m_reconnect_begin_tm;//unit: ms
+    int                  m_listen_port;
 
     char     m_app_uplive[1024];
     char     m_stream_name[1024];

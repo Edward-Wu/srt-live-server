@@ -29,17 +29,15 @@
 #include "SLSRecycleArray.hpp"
 #include "SLSLog.hpp"
 
-const int DEFAULT_MAX_READER_COUNT = 4096;
 const int DEFAULT_MAX_DATA_SIZE = 1024*1316;//about 5mbps*2sec
 
 CSLSRecycleArray::CSLSRecycleArray()
 {
-    m_arrayData     = NULL;
     m_nDataSize     = DEFAULT_MAX_DATA_SIZE;
     m_nWritePos     = 0;
     m_nDataCount    = 0;
 
-    m_last_read_time = sls_gettime_relative();
+    m_last_read_time = sls_gettime_ms();
 
     m_arrayData      = new char[m_nDataSize];
 
@@ -60,9 +58,15 @@ int CSLSRecycleArray::count()
     return m_nDataCount;
 }
 
+//please call this function before get and put,
+//if not, the read data will be make confusion.
 void CSLSRecycleArray::setSize(int n)
 {
-    m_nDataSize = n;
+    CSLSLock lock(&m_rwclock, false);
+    delete[] m_arrayData ;
+    m_nDataSize      = n;
+    m_nWritePos      = 0;
+    m_arrayData      = new char[m_nDataSize];
 }
 
 int CSLSRecycleArray::put(char * data, int len)
@@ -131,7 +135,7 @@ int CSLSRecycleArray::get(char *data, int size, SLSRecycleArrayID *read_id)
             this, read_id->nReadPos, m_nWritePos, m_nDataCount, m_nDataSize);
 
     //update the last read time
-    m_last_read_time = sls_gettime_relative();
+    m_last_read_time = sls_gettime_ms();
 
     int ready_data_len = 0;
     int copy_data_len  = 0;

@@ -77,8 +77,8 @@ void CSLSLog::print_log(int level, const char *fmt, va_list vl)
     CSLSLock lock(&m_mutex);
     char buf[4096] = {0};
     char buf_info[4096] = {0};
-    char cur_time[32] = {0};
-    int64_t cur_time_msec = sls_gettime()/1000;
+    char cur_time[STR_DATE_TIME_LEN] = {0};
+    int64_t cur_time_msec = sls_gettime_ms();
     int64_t cur_time_sec = cur_time_msec/1000;
     cur_time_msec = cur_time_msec - cur_time_sec*1000;
     sls_gettime_fmt(cur_time, cur_time_sec, "%Y-%m-%d %H:%M:%S");

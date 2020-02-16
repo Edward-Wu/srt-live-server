@@ -61,7 +61,7 @@ int CSLSPusherManager::connect_all()
 		ret = connect(szURL);
 		if (SLS_OK != ret) {
 		    CSLSLock lock(&m_rwclock, true);
-			m_map_reconnect_relay[std::string(szURL)] = sls_gettime_relative()/1000;
+			m_map_reconnect_relay[std::string(szURL)] = sls_gettime_ms();
 		}
 		all_ret |= ret;
 	}
@@ -78,7 +78,7 @@ int CSLSPusherManager::start()
 	}
 
 	//check publisher
-	char key_stream_name[1024] = {0};
+	char key_stream_name[URL_MAX_LEN] = {0};
 	sprintf(key_stream_name, "%s/%s", m_app_uplive, m_stream_name);
 	if (NULL != m_map_publisher) {
 	    CSLSRole * publisher = m_map_publisher->get_publisher(key_stream_name);
@@ -129,11 +129,11 @@ int CSLSPusherManager::add_reconnect_stream(char* relay_url)
 	if (SLS_PM_ALL == m_sri->m_mode) {
 		std::string url = std::string(relay_url);
 	    CSLSLock lock(&m_rwclock, true);
-	    int64_t tm = sls_gettime_relative()/1000;
+	    int64_t tm = sls_gettime_ms();
         m_map_reconnect_relay[url] = tm;
         ret = SLS_OK;
 	} else if (SLS_PM_HASH == m_sri->m_mode) {
-		m_reconnect_begin_tm = sls_gettime_relative()/1000;
+		m_reconnect_begin_tm = sls_gettime_ms();
         ret = SLS_OK;
 	} else {
 	    sls_log(SLS_LOG_INFO, "[%p]CSLSPusherManager::add_reconnect_stream, failed, wrong m_sri->m_mode=%d, m_app_uplive=%s, m_stream_name=%s.",

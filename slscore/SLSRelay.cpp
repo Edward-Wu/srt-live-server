@@ -43,11 +43,12 @@ SLS_CONF_DYNAMIC_IMPLEMENT(relay)
 CSLSRelay::CSLSRelay()
 {
     m_is_write             = 0;
-    memset(m_url, 0, 1024);
+    memset(m_url, 0, URL_MAX_LEN);
+    memset(m_server_ip, 0, IP_MAX_LEN);
 
+    m_server_port          = 0;
     m_map_publisher        = NULL;
     m_relay_manager        = NULL;
-
     m_need_reconnect       = true;
 
     sprintf(m_role_name, "relay");
@@ -85,7 +86,8 @@ void *CSLSRelay::get_relay_manager()
 	return m_relay_manager;
 }
 
-int CSLSRelay::parse_url(char* url, char *host_name, int& port, char * streamid) {
+int CSLSRelay::parse_url(char* url, char *host_name, int& port, char * streamid)
+{
     //
     if (strlen(url) == 0) {
     	sls_log(SLS_LOG_INFO, "[%p]CSLSRelay::parse_url='%s', url must like 'srt://hostname:port?streamid=your_stream_id' or 'srt://hostname:port/app/stream_name'.",
@@ -272,7 +274,8 @@ int CSLSRelay::open(const char * srt_url) {
     }
     m_srt = new CSLSSrt();
     m_srt->libsrt_set_fd(fd);
-
+    strcpy(m_server_ip, server_ip);
+    m_server_port = server_port;
     return status;
 }
 
@@ -293,5 +296,15 @@ char *CSLSRelay::get_url()
     return m_url;
 }
 
+int CSLSRelay::get_peer_info(char *peer_name, int &peer_port)
+{
+	strcpy(peer_name, m_server_ip);
+	peer_port = m_server_port;
+	return SLS_OK;
+}
 
+int  CSLSRelay::get_stat_base(char *stat_base)
+{
+    return SLS_OK;
+}
 

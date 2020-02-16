@@ -62,3 +62,7 @@ v1.3
 2. add idle_streams_timeout feature for relay.
 3. change license type from gpl to mit.
 
+v1.4
+1.add http statistic info
+2.add http event notification, on_connect, on_close.
+

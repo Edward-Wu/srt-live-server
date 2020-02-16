@@ -174,7 +174,7 @@ struct sls_opt_t {
 //  int xxx;                  //-x example
 };
 
-int sls_parese_argv(int argc, char * argv[], sls_opt_t * sls_opt, sls_conf_cmd_t *conf_cmd_opt, int cmd_size);
+int sls_parse_argv(int argc, char * argv[], sls_opt_t * sls_opt, sls_conf_cmd_t *conf_cmd_opt, int cmd_size);
 
 
 sls_conf_cmd_t  * sls_conf_find(const char *n, sls_conf_cmd_t *cmd, int size);

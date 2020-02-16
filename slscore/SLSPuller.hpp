@@ -39,7 +39,8 @@ public :
 
     virtual int  uninit();
     virtual int  handler();
-private:
+    virtual int  get_stat_base(char *stat_base);
+protected:
 
 };
 

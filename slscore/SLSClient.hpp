@@ -23,68 +23,48 @@
  */
 
 
-#include <errno.h>
-#include <string.h>
+#ifndef _SLSClient_INCLUDE_
+#define _SLSClient_INCLUDE_
 
+#include <list>
 
-#include "SLSRoleList.hpp"
-#include "SLSLog.hpp"
-#include "SLSLock.hpp"
+#include "SLSRelay.hpp"
+
 
 /**
- * CSLSRoleList class implementation
+ * CSLSClient
  */
-
-CSLSRoleList::CSLSRoleList()
+class CSLSClient: public CSLSRelay
 {
-}
-CSLSRoleList::~CSLSRoleList()
-{
-}
+public :
+	CSLSClient();
+    virtual ~CSLSClient();
 
-int CSLSRoleList::push(CSLSRole * role)
-{
-	if (role) {
-	    CSLSLock lock(&m_mutex);
-	    m_list_role.push_back(role);
-	}
-	return 0;
-}
+    int play(const char *url, const char *out_file_name);
+    int push(const char *url, const char *ts_file_name);
 
-CSLSRole * CSLSRoleList::pop()
-{
-	CSLSLock lock(&m_mutex);
-	CSLSRole * role = NULL;
-    if (!m_list_role.empty()) {
-        role = m_list_role.front();
-        m_list_role.pop_front();
-    }
-	return role;
-}
+    virtual int close();
+    virtual int handler();
 
-void CSLSRoleList::erase()
-{
-    CSLSLock lock(&m_mutex);
-    sls_log(SLS_LOG_TRACE, "[%p]CSLSRoleList::erase, list.count=%d", this, m_list_role.size());
-    std::list<CSLSRole * >::iterator it_erase;
-    for (std::list<CSLSRole * >::iterator it = m_list_role.begin(); it != m_list_role.end();)
-    {
-        CSLSRole * role = *it;
-        if (role) {
-        	role->uninit();
-            delete role;
-        }
-        it ++;
-    }
-    m_list_role.clear();
-}
+    int64_t get_bitrate();
 
-int CSLSRoleList::size()
-{
-    CSLSLock lock(&m_mutex);
-	return m_list_role.size();
-}
+protected:
+    int init_epoll();
+    int uninit_epoll();
+
+    int open_url(const char* url);
+
+    char  m_url[1024];
+    char  m_ts_file_name[1024];
+    char  m_out_file_name[1024];
+
+    int   m_eid;
+    int   m_out_file;
+
+    int64_t m_data_count;
+    int64_t m_bit_rate;//kbit/s
+
+};
 
 
-
-
+#endif

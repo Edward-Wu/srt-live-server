@@ -31,6 +31,19 @@
 #include "SLSLog.hpp"
 #include "SLSMapRelay.hpp"
 
+const char SLS_RELAY_STAT_INFO_BASE[] = "\
+{\
+\"port\": \"%d\",\
+\"role\": \"%s\",\
+\"pub_domain_app\": \"%s\",\
+\"stream_name\": \"%s\",\
+\"url\": \"%s\",\
+\"remote_ip\": \"%s\",\
+\"remote_port\": \"%d\",\
+\"start_time\": \"%s\",\
+\"kbitrate\":\
+";
+
 /**
  * CSLSPuller class implementation
  */
@@ -73,8 +86,8 @@ int CSLSPuller::handler()
 		if (-1 == m_idle_streams_timeout) {
 			return ret;
 		}
-		int64_t cur_time = sls_gettime_relative();
-		if (cur_time - last_read_time >= (m_idle_streams_timeout*1000000)) {
+		int64_t cur_time = sls_gettime_ms();
+		if (cur_time - last_read_time >= (m_idle_streams_timeout*1000)) {
 	        sls_log(SLS_LOG_INFO, "[%p]CSLSPuller::handler, no any reader for m_idle_streams_timeout=%ds, last_read_time=%lld, close puller.",
 	        		this, m_idle_streams_timeout, last_read_time);
 			m_state = SLS_RS_INVALID;
@@ -84,6 +97,12 @@ int CSLSPuller::handler()
 		//*/
 	}
 	return ret;
+}
+
+int   CSLSPuller::get_stat_base(char *stat_base)
+{
+    strcpy(stat_base, SLS_RELAY_STAT_INFO_BASE);
+    return SLS_OK;
 }
 
 

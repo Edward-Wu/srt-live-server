@@ -28,7 +28,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
+#include <string>
+#include <vector>
 
 using namespace std;
 
@@ -73,11 +74,16 @@ using namespace std;
 #define msleep(ms) usleep(ms*1000)
 
 #define TS_UDP_LEN 1316//7*188
+#define STR_MAX_LEN 1024
+#define URL_MAX_LEN STR_MAX_LEN
+#define STR_DATE_TIME_LEN 32
+#define IP_MAX_LEN 32
 
 
-int64_t sls_gettime(void);
-int64_t sls_gettime_relative(void);
+int64_t sls_gettime_ms(void);//rturn millisecond
+int64_t sls_gettime(void);//rturn microsecond
 void    sls_gettime_fmt(char *dst, int64_t cur_time_sec, char *fmt);
+void    sls_gettime_default_string(char *cur_time);
 char  * sls_strupper(char * str);
 
 uint32_t sls_hash_key(const char *data, int len);
@@ -87,5 +93,8 @@ int sls_read_pid();
 int sls_write_pid(int pid);
 int sls_remove_pid();
 int sls_send_cmd(const char *cmd);
+
+void sls_split_string(std::string str, std::string separator, std::vector<std::string> &result, int count=-1);
+std::string sls_find_string(std::vector<std::string> &src, std::string &dst);
 
 #endif

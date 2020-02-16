@@ -40,7 +40,7 @@ class CSLSMutex
 public :
     CSLSMutex()
     {
-        pthread_mutex_init(&m_mutex,NULL);
+        pthread_mutex_init(&m_mutex, NULL);
     }
     ~CSLSMutex()
     {
@@ -48,7 +48,6 @@ public :
     }
     pthread_mutex_t * get_mutex() {  return &m_mutex; }
 private:
-
     pthread_mutex_t m_mutex;
 
 };

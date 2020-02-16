@@ -1,4 +1,3 @@
-
 /**
  * The MIT License (MIT)
  *
@@ -23,68 +22,35 @@
  */
 
 
-#include <errno.h>
-#include <string.h>
 
+#ifndef _HttpRoleList_INCLUDE_
+#define _HttpRoleList_INCLUDE_
 
-#include "SLSRoleList.hpp"
-#include "SLSLog.hpp"
+#include <list>
+
+#include "HttpClient.hpp"
 #include "SLSLock.hpp"
 
 /**
- * CSLSRoleList class implementation
+ * CHttpRoleList
  */
-
-CSLSRoleList::CSLSRoleList()
+class CHttpRoleList
 {
-}
-CSLSRoleList::~CSLSRoleList()
-{
-}
+public :
+	CHttpRoleList();
+    ~CHttpRoleList();
 
-int CSLSRoleList::push(CSLSRole * role)
-{
-	if (role) {
-	    CSLSLock lock(&m_mutex);
-	    m_list_role.push_back(role);
-	}
-	return 0;
-}
+    int          push(CHttpClient *role);
+    CHttpClient *pop();
+    void         erase();
+    int          size();
 
-CSLSRole * CSLSRoleList::pop()
-{
-	CSLSLock lock(&m_mutex);
-	CSLSRole * role = NULL;
-    if (!m_list_role.empty()) {
-        role = m_list_role.front();
-        m_list_role.pop_front();
-    }
-	return role;
-}
+protected:
 
-void CSLSRoleList::erase()
-{
-    CSLSLock lock(&m_mutex);
-    sls_log(SLS_LOG_TRACE, "[%p]CSLSRoleList::erase, list.count=%d", this, m_list_role.size());
-    std::list<CSLSRole * >::iterator it_erase;
-    for (std::list<CSLSRole * >::iterator it = m_list_role.begin(); it != m_list_role.end();)
-    {
-        CSLSRole * role = *it;
-        if (role) {
-        	role->uninit();
-            delete role;
-        }
-        it ++;
-    }
-    m_list_role.clear();
-}
-
-int CSLSRoleList::size()
-{
-    CSLSLock lock(&m_mutex);
-	return m_list_role.size();
-}
+private:
+    std::list<CHttpClient * > m_list_role;
+    CSLSMutex                 m_mutex;
+};
 
 
-
-
+#endif

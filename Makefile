@@ -1,5 +1,6 @@
 SHELL = /bin/sh
 MAIN_NAME=sls
+CLIENT_NAME=sls_client
 INC_PATH = -I./ -I../ -I./slscore -I./include
 LIB_PATH =  -L ./lib
 LIBRARY_FILE = -lpthread -lz -lsrt
@@ -35,7 +36,11 @@ OBJS = $(OUTPUT_PATH)/SLSLog.o \
 	$(OUTPUT_PATH)/SLSPullerManager.o\
 	$(OUTPUT_PATH)/SLSPusherManager.o\
 	$(OUTPUT_PATH)/SLSMapRelay.o\
-			
+	$(OUTPUT_PATH)/SLSClient.o\
+	$(OUTPUT_PATH)/TCPRole.o\
+	$(OUTPUT_PATH)/SLSArray.o\
+	$(OUTPUT_PATH)/HttpRoleList.o\
+	$(OUTPUT_PATH)/HttpClient.o			
 	
 CORE_PATH = slscore
 COMMON_FILES = common.hpp
@@ -44,7 +49,8 @@ all: $(OBJS)
 	mkdir -p ${LOG_PATH}
 	mkdir -p ${OUTPUT_PATH}
 	mkdir -p ${BIN_PATH}
-	g++ -o ${BIN_PATH}/${MAIN_NAME} srt-live-server.cpp $(OBJS) $(CFLAGS) $(INC_PATH) $(LIB_PATH) $(LIBRARY_FILE)
+	g++ -o ${BIN_PATH}/${MAIN_NAME}   srt-live-server.cpp $(OBJS) $(CFLAGS) $(INC_PATH) $(LIB_PATH) $(LIBRARY_FILE)
+	g++ -o ${BIN_PATH}/${CLIENT_NAME} srt-live-client.cpp $(OBJS) $(CFLAGS) $(INC_PATH) $(LIB_PATH) $(LIBRARY_FILE)
 	#******************************************************************************#
 	#                          Bulid successful !                                  #
 	#******************************************************************************#
@@ -116,6 +122,21 @@ $(OUTPUT_PATH)/SLSPusherManager.o: ./$(CORE_PATH)/SLSPusherManager.cpp
 	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
 
 $(OUTPUT_PATH)/SLSMapRelay.o: ./$(CORE_PATH)/SLSMapRelay.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSClient.o: ./$(CORE_PATH)/SLSClient.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/TCPRole.o: ./$(CORE_PATH)/TCPRole.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSArray.o: ./$(CORE_PATH)/SLSArray.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/HttpRoleList.o: ./$(CORE_PATH)/HttpRoleList.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/HttpClient.o: ./$(CORE_PATH)/HttpClient.cpp 
 	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
 
 clean:

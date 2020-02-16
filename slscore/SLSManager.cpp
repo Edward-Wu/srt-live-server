@@ -53,8 +53,6 @@ CSLSManager::CSLSManager()
     m_map_publisher  = NULL;
     m_map_puller     = NULL;
     m_map_pusher     = NULL;
-
-
 }
 
 CSLSManager::~CSLSManager()
@@ -89,10 +87,10 @@ int CSLSManager::start()
     }
     m_server_count = sls_conf_get_conf_count(conf_server);
     sls_conf_server_t * conf = conf_server;
-    m_map_data = new CSLSMapData[m_server_count];
+    m_map_data      = new CSLSMapData[m_server_count];
     m_map_publisher = new CSLSMapPublisher[m_server_count];
-    m_map_puller = new CSLSMapRelay[m_server_count];
-    m_map_pusher = new CSLSMapRelay[m_server_count];
+    m_map_puller    = new CSLSMapRelay[m_server_count];
+    m_map_pusher    = new CSLSMapRelay[m_server_count];
 
     //role list
     m_list_role = new CSLSRoleList;
@@ -128,6 +126,7 @@ int CSLSManager::start()
         p->set_worker_number(0);
         p->set_role_list(m_list_role);
         p->set_worker_connections(conf_srt->worker_connections);
+        p->set_stat_post_interval(conf_srt->stat_post_interval);
         if (SLS_OK != p->init_epoll()) {
             sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, p->init_epoll failed.", this);
             return SLS_ERROR;
@@ -141,6 +140,7 @@ int CSLSManager::start()
             p->set_worker_number(i);
             p->set_role_list(m_list_role);
             p->set_worker_connections(conf_srt->worker_connections);
+            p->set_stat_post_interval(conf_srt->stat_post_interval);
             if (SLS_OK != p->init_epoll()) {
                 sls_log(SLS_LOG_INFO, "[%p]CSLSManager::start, p->init_epoll failed.", this);
                 return SLS_ERROR;
@@ -173,8 +173,8 @@ int CSLSManager::stop()
 {
 	int ret = 0;
 	int i = 0;
-    //stop groups
-    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::stop, release worker, count=%d.", this, m_workers.size());
+    //
+    sls_log(SLS_LOG_INFO, "[%p]CSLSManager::stop.", this);
 
     //stop all listeners
     std::list<CSLSListener *>::iterator it;
@@ -225,7 +225,6 @@ int CSLSManager::stop()
     	delete m_list_role;
     	m_list_role = NULL;
     }
-
     return ret;
 }
 
@@ -282,5 +281,33 @@ int  CSLSManager::check_invalid()
         return SLS_OK;
     return SLS_ERROR;
 }
+
+void CSLSManager::get_stat_info(std::string &info)
+{
+    std::list<CSLSGroup *>::iterator it;
+    std::list<CSLSGroup *>::iterator it_end = m_workers.end();
+    for ( it = m_workers.begin(); it != it_end; ) {
+    	CSLSGroup *worker = *it;
+    	it++;
+    	if (NULL != worker) {
+    		worker->get_stat_info(info);
+    	}
+    }
+}
+
+int  CSLSManager::stat_client_callback(void *p, HTTP_CALLBACK_TYPE type, void *v, void* context)
+{
+	CSLSManager *manager = (CSLSManager *)context;
+	if (HCT_REQUEST_CONTENT == type) {
+		std::string * p_response = (std::string *)v;
+		manager->get_stat_info(*p_response);
+	} else if (HCT_RESPONSE_END == type) {
+		//response info maybe include info that server send client, such as reload cmd...
+	} else {
+
+	}
+	return SLS_OK;
+}
+
 
 

@@ -46,15 +46,23 @@ CSLSRole::CSLSRole()
     m_conf             = NULL;
     m_map_data         = NULL;        // role:data'
 
-    m_invalid_begin_tm     = sls_gettime_relative();
-    m_idle_streams_timeout = 10; //unit :s
+    m_invalid_begin_tm          = sls_gettime_ms();
+    m_stat_bitrate_last_tm      = m_invalid_begin_tm;
+    m_stat_bitrate_interval     = 1000;//ms
+    m_stat_bitrate_datacount    = 0;
+	m_idle_streams_timeout = 10; //unit :s
 
     m_data_len = 0;
     m_data_pos = 0;
 
     m_need_reconnect = false;
+    m_http_client    = NULL;
+    m_http_passed    = true;
 
-    memset(m_map_data_key, 0, 1024);
+    memset(m_map_data_key, 0, URL_MAX_LEN);
+    memset(m_http_url, 0, URL_MAX_LEN);
+    memset(m_streamid, 0, URL_MAX_LEN);
+
 
 	sprintf(m_role_name, "role");
 }
@@ -80,6 +88,12 @@ int CSLSRole::init()
 int CSLSRole::uninit()
 {
 	int ret = 0;
+	if (NULL != m_http_client) {
+		m_http_client->close();
+		delete m_http_client;
+		m_http_client = NULL;
+	}
+
 	if (SLS_RS_UNINIT != m_state)
 	{
         m_state = SLS_RS_UNINIT;
@@ -96,16 +110,18 @@ int CSLSRole::invalid_srt()
         m_srt->libsrt_close();
         delete m_srt;
         m_srt = NULL;
+
+        on_close();
     }
     return SLS_OK;
 }
 
-int CSLSRole::get_state(int64_t cur_time_microsec)
+int CSLSRole::get_state(int64_t cur_time_ms)
 {
 	if (SLS_RS_INVALID == m_state)
 		return m_state;
 
-	if (check_idle_streams_duration(cur_time_microsec)) {
+	if (check_idle_streams_duration(cur_time_ms)) {
 		sls_log(SLS_LOG_INFO, "[%p]CSLSRole::get_state, check_idle_streams_duration is true, cur m_state=%d, m_idle_streams_timeout=%ds, call invalid_srt.",
 				this, m_state, m_idle_streams_timeout);
 		m_state = SLS_RS_INVALID;
@@ -203,12 +219,15 @@ char * CSLSRole::get_role_name()
 
 char * CSLSRole::get_streamid()
 {
-	char sid[1024] = {0};
-	int  sid_size = sizeof(sid);
-    if (m_srt) {
-    	m_srt->libsrt_getsockopt(SRTO_STREAMID, "SRTO_STREAMID", sid, &sid_size);
-    }
-    return sid;
+	if (strlen(m_streamid) != 0) {
+		return m_streamid;
+	}
+	char sid[URL_MAX_LEN] = {0};
+	int  sid_size = sizeof(m_streamid);
+	if (m_srt) {
+		m_srt->libsrt_getsockopt(SRTO_STREAMID, "SRTO_STREAMID", m_streamid, &sid_size);
+	}
+    return m_streamid;
 }
 
 bool CSLSRole::is_reconnect()
@@ -236,24 +255,37 @@ void CSLSRole::set_idle_streams_timeout(int timeout)
 	m_idle_streams_timeout = timeout;
 }
 
-bool CSLSRole::check_idle_streams_duration(int64_t cur_time_microsec)
+bool CSLSRole::check_idle_streams_duration(int64_t cur_time_ms)
 {
 	if (-1 == m_idle_streams_timeout) {
 		return false;
 	}
-	if (0 == cur_time_microsec ) {
-		cur_time_microsec = sls_gettime_relative();
+	if (0 == cur_time_ms ) {
+		cur_time_ms = sls_gettime_ms();
 	}
-	int duration = (cur_time_microsec - m_invalid_begin_tm)/1000000;
-    if (duration >= m_idle_streams_timeout) {
+	int duration = cur_time_ms - m_invalid_begin_tm;
+    if (duration >= m_idle_streams_timeout*1000) {
     	return true;
     }
 	return false;
 }
 
+int CSLSRole::check_http_client()
+{
+	if (NULL == m_http_client) {
+		return SLS_ERROR;
+	}
+	return SLS_OK;
+}
+
+
 int CSLSRole::handler_read_data(int64_t *last_read_time)
 {
 	char szData[TS_UDP_LEN];
+
+	if (SLS_OK != check_http_passed()) {
+		return SLS_OK;
+	}
 
 	if (NULL == m_srt) {
         sls_log(SLS_LOG_ERROR, "[%p]CSLSRole::handler_read_data, m_srt is null.", this);
@@ -266,8 +298,15 @@ int CSLSRole::handler_read_data(int64_t *last_read_time)
 	    return SLS_ERROR;
 	}
 
+	m_stat_bitrate_datacount += n;
 	//update invalid begin time
-	m_invalid_begin_tm = sls_gettime_relative();
+	m_invalid_begin_tm = sls_gettime_ms();
+	int d = m_invalid_begin_tm - m_stat_bitrate_last_tm;
+	if (d >= m_stat_bitrate_interval) {
+		m_kbitrate = m_stat_bitrate_datacount*8/d;
+		m_stat_bitrate_datacount = 0;
+		m_stat_bitrate_last_tm = m_invalid_begin_tm;
+	}
 
 	if (n != TS_UDP_LEN) {
         sls_log(SLS_LOG_ERROR, "[%p]CSLSRole::handler_read_data, libsrt_read n=%d, expect %d.", this, n, TS_UDP_LEN);
@@ -288,6 +327,10 @@ int CSLSRole::handler_write_data()
 {
 	int ret = 0;
 	int write_size = 0;
+
+	if (check_http_passed()) {
+		return SLS_OK;
+	}
 
     //read data from publisher's data array
     if (NULL == m_map_data) {
@@ -311,8 +354,15 @@ int CSLSRole::handler_write_data()
         m_data_len = ret;
     }
 
-    //update invalid begin time
-    m_invalid_begin_tm = sls_gettime_relative();
+	m_stat_bitrate_datacount += ret;
+	//update invalid begin time
+	m_invalid_begin_tm = sls_gettime_ms();
+	int d = m_invalid_begin_tm - m_stat_bitrate_last_tm;
+	if (d >= m_stat_bitrate_interval) {
+		m_kbitrate = m_stat_bitrate_datacount*8/d;
+		m_stat_bitrate_datacount = 0;
+		m_stat_bitrate_last_tm = m_invalid_begin_tm;
+	}
 
     int len = m_data_len - m_data_pos;
     while (m_data_pos < m_data_len) {
@@ -337,4 +387,114 @@ int CSLSRole::handler_write_data()
     m_data_pos = m_data_len = 0;
 
     return write_size ;
+}
+
+void   CSLSRole::set_stat_info_base(std::string &v)
+{
+	m_stat_info_base = v;
+}
+
+std::string   CSLSRole::get_stat_info()
+{
+	char tmp[STR_MAX_LEN] = {0};
+    sprintf(tmp, "\"%d\"}", m_kbitrate);
+	return m_stat_info_base + std::string(tmp);
+}
+
+
+int  CSLSRole::get_peer_info(char *peer_name, int &peer_port)
+{
+    int ret = SLS_ERROR;
+    if (m_srt) {
+        ret = m_srt->libsrt_getpeeraddr(peer_name, peer_port);
+    }
+    return ret;
+}
+
+void  CSLSRole::set_http_url(const char *http_url)
+{
+	if (NULL == http_url || strlen(http_url) == 0) {
+	    return ;
+	}
+	strcpy(m_http_url, http_url);
+	if (NULL == m_http_client) {
+		m_http_client = new CHttpClient;
+		m_http_passed = false;
+	}
+}
+
+int  CSLSRole::on_connect()
+{
+	if (strlen(m_http_url) == 0) {
+		return SLS_ERROR;
+	}
+	if (NULL == m_http_client) {
+		m_http_client = new CHttpClient;
+	}
+
+	char on_event_url[URL_MAX_LEN] = {0};
+	sprintf(on_event_url, "%s?on_event=on_connect&role_name=%s&srt_url=%s",
+			m_http_url, m_role_name, get_streamid());
+
+	return m_http_client->open(on_event_url);
+}
+
+int  CSLSRole::on_close()
+{
+	if (!m_http_passed) {
+		return SLS_OK;
+	}
+	if (strlen(m_http_url) == 0) {
+		return SLS_OK;
+	}
+	if (NULL == m_http_client) {
+		m_http_client = new CHttpClient;
+	}
+
+	char on_event_url[URL_MAX_LEN] = {0};
+	sprintf(on_event_url, "%s?on_event=on_close&role_name=%s&srt_url=%s",
+			m_http_url, m_role_name, get_streamid());
+
+	int ret = m_http_client->open(on_event_url);
+	return ret;
+}
+
+int CSLSRole::check_http_passed()
+{
+	if (m_http_passed)
+		return SLS_OK;
+
+	if (!m_http_client) {
+		return SLS_OK;
+	}
+
+	m_http_client->handler();
+
+	if (SLS_OK != m_http_client->check_finished() && SLS_OK != m_http_client->check_timeout()) {
+		return SLS_ERROR;
+	}
+
+	HTTP_RESPONSE_INFO * re = m_http_client->get_response_info();
+	if (NULL == re) {
+	    return SLS_ERROR;
+	}
+
+	int ret = strcmp(re->m_response_code.c_str(), HTTP_RESPONSE_CODE_200);
+    if (0 == ret) {
+        sls_log(SLS_LOG_INFO, "[%p]CSLSRole::check_http_client_response, http finished, %s, http_url='%s', response_code=%s, response='%s'.",
+    					this, m_role_name, m_http_url, re->m_response_code.c_str(), re->m_response_content.c_str());
+		m_http_client->close();
+		delete m_http_client;
+		m_http_client = NULL;
+		m_http_passed = true;
+	    return SLS_OK;
+    } else {
+        sls_log(SLS_LOG_INFO, "[%p]CSLSPlayer::check_http_client_response, http refused, invalid %s http_url='%s', response_code=%s, response='%s'.",
+						this, m_role_name, m_http_url, re->m_response_code.c_str(), re->m_response_content.c_str());
+		m_http_client->close();
+		delete m_http_client;
+		m_http_client = NULL;
+		invalid_srt();
+		return SLS_ERROR;
+	}
 }

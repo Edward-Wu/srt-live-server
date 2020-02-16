@@ -35,6 +35,7 @@
 #include "conf.hpp"
 #include "SLSLock.hpp"
 #include "common.hpp"
+#include "HttpClient.hpp"
 
 
 enum SLS_ROLE_STATE {
@@ -81,38 +82,56 @@ public :
     void        set_map_data(char *map_key, CSLSMapData *map_data);
 
     void        set_idle_streams_timeout(int timeout);
-    bool        check_idle_streams_duration(int64_t cur_time_microsec = 0);
+    bool        check_idle_streams_duration(int64_t cur_time_ms = 0);
 
     char      * get_streamid();
     bool        is_reconnect();
+
+    void        set_stat_info_base(std::string &v);
+    virtual std::string get_stat_info();
+    void        update_stat_info();
+    virtual int get_peer_info(char *peer_name, int &peer_port);
+
+    void        set_http_url(const char *http_url);
+    int         on_connect();
+    int         on_close();
+    int         check_http_client();
+    int         check_http_passed();
 
 protected:
     CSLSSrt    * m_srt;
     bool         m_is_write;//listener: 0, publisher: 0, player: 1
     int64_t      m_invalid_begin_tm;//
+    int64_t      m_stat_bitrate_last_tm;//
+    int          m_stat_bitrate_interval ;//ms
+    int          m_stat_bitrate_datacount ;
+    int          m_kbitrate;//kb
     int          m_idle_streams_timeout;//unit: s, -1: unlimited
     int          m_latency;//ms
 
     int          m_state;
     int          m_back_log;//maximum number of connections at the same time
+    int          m_port;
     char         m_role_name[256];
-    char         m_streamid[256];
+    char         m_streamid[URL_MAX_LEN];
+    char         m_http_url[URL_MAX_LEN];
+    bool         m_http_passed;
 
     sls_conf_base_t   * m_conf;
 
     CSLSMapData       * m_map_data;
-    char                m_map_data_key[1024];
+    char                m_map_data_key[URL_MAX_LEN];
     SLSRecycleArrayID   m_map_data_id;
-
-    int handler_write_data();
-    int handler_read_data(int64_t *last_read_time=NULL);
-
 
     char          m_data[DATA_BUFF_SIZE];
     int           m_data_len;
     int           m_data_pos;
-
     bool          m_need_reconnect;
+    std::string   m_stat_info_base;
+    CHttpClient  *m_http_client;
+
+    int handler_write_data();
+    int handler_read_data(int64_t *last_read_time=NULL);
 
 private:
 

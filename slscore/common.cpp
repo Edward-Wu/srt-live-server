@@ -22,25 +22,27 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <string>
-#include <vector>
-#include <cstdarg>
-#include <sys/time.h>
-#include <string.h>
-#include <netdb.h>
+
 #include <sys/socket.h>
-#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/types.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <stdlib.h>
-#include <fcntl.h>
+
+#include <cstdarg>
 #include <errno.h>
-#include <unistd.h>
+#include <fcntl.h>
+#include <netdb.h>
 #include <signal.h>
-#include <sys/types.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <string>
+#include <vector>
 
 
 #include "common.hpp"
@@ -68,6 +70,11 @@ std::string sls_format(const char *pszFmt, ...)
 
 #define HAVE_GETTIMEOFDAY 1
 
+int64_t sls_gettime_ms(void)//rturn millisecond
+{
+	return sls_gettime()/1000;
+}
+
 int64_t sls_gettime(void)//rturn micro-second
 {
 #if HAVE_GETTIMEOFDAY
@@ -85,21 +92,14 @@ int64_t sls_gettime(void)//rturn micro-second
 #endif
 }
 
-int64_t sls_gettime_relative(void)
+void sls_gettime_default_string(char *cur_time)
 {
-#if HAVE_CLOCK_GETTIME && defined(CLOCK_MONOTONIC)
-#ifdef __APPLE__
-    if (clock_gettime)
-#endif
-    {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        return (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-    }
-#endif
-    return sls_gettime() + 42 * 60 * 60 * INT64_C(1000000);
+	if (NULL == cur_time) {
+		return ;
+	}
+    int64_t cur_time_sec = sls_gettime()/1000000;
+    sls_gettime_fmt(cur_time, cur_time_sec, "%Y-%m-%d %H:%M:%S");
 }
-
 
 void sls_gettime_fmt(char *dst, int64_t cur_time_sec, char *fmt)
 {
@@ -401,4 +401,42 @@ int sls_send_cmd(const char *cmd)
         return SLS_OK;
     }
     return SLS_OK;
+}
+
+#define ADD_VECTOR_END(v,i) (v).push_back((i))
+
+void sls_split_string(std::string str, std::string separator, std::vector<std::string> &result, int count)
+{
+	result.clear();
+	string::size_type position = str.find(separator);
+	string::size_type lastPosition = 0;
+	uint32_t separatorLength = (uint32_t) separator.length();
+
+	int i = 0;
+	while (position != str.npos) {
+		ADD_VECTOR_END(result, str.substr(lastPosition, position - lastPosition));
+		lastPosition = position + separatorLength;
+		position = str.find(separator, lastPosition);
+		i ++;
+		if (i == count)
+			break;
+	}
+	ADD_VECTOR_END(result, str.substr(lastPosition, string::npos));
+}
+
+std::string sls_find_string(std::vector<std::string> &src, std::string &dst)
+{
+	std::string ret = std::string("");
+	std::vector<std::string>::iterator it;
+    for(it=src.begin(); it!=src.end();) {
+    	std::string str = *it;
+    	it ++;
+    	string::size_type pos = str.find(dst);
+    	if (pos != std::string::npos)
+    	{
+    		ret = str;
+    	    break;
+    	}
+    }
+    return ret;
 }

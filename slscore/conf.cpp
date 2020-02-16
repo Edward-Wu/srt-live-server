@@ -400,7 +400,7 @@ static void sls_remove_marks(char * s) {
     }
 }
 
-int sls_parese_argv(int argc, char * argv[], sls_opt_t * sls_opt, sls_conf_cmd_t *conf_cmd_opt, int cmd_size)
+int sls_parse_argv(int argc, char * argv[], sls_opt_t * sls_opt, sls_conf_cmd_t *conf_cmd_opt, int cmd_size)
 {
     char opt_name[256] = {0};
     char opt_value[256] = {0};
