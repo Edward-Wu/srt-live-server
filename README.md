@@ -74,5 +74,9 @@ v1.4
 2. add http event notification, on_connect, on_close.
 3. add srt-live-client tool for pressure test.
 
+v1.1
+1. add push ts file through slc tool.
+2. modify the http bug when host is not available.
+
 
 
