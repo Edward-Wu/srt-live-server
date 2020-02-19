@@ -112,17 +112,14 @@ int CTCPRole::read(char * buf, int size)
 {
 	int len = 0;
 	len = recv(m_fd, buf, size, 0);
-	if (len < 0){
+	if (len <= 0){
         sls_log(SLS_LOG_TRACE, "[%p]CTCPRole::read, len=%d, errno=%d, err='%s'.",
         		this, len, errno, strerror(errno));
 		if (errno != EAGAIN ) {
-	        sls_log(SLS_LOG_INFO, "[%p]CTCPRole::read, err='%s', invalid tcp.",
-	        		this, strerror(errno));
+	        sls_log(SLS_LOG_INFO, "[%p]CTCPRole::read, invalid tcp.",
+	        		this);
 			m_valid = false;
 		}
-	} else if (len == 0) {
-        sls_log(SLS_LOG_INFO, "[%p]CTCPRole::read, len=0, err='%s'.",
-        		this, strerror(errno));
 	}
     return len;
 }

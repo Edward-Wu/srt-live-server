@@ -42,14 +42,14 @@ public :
     ~CSLSArray();
 
 public :
-    int  put(const char *data, int len);
-    int  get(char *data, int size);
+    int  put(const uint8_t *data, int len);
+    int  get(uint8_t *data, int size);
 
     void setSize(int n);
     int  count();
     void clear();
 private:
-    char     *m_arrayData;
+    uint8_t  *m_arrayData;
     int       m_nDataSize;
     int       m_nDataCount;
     int       m_nWritePos;
@@ -57,7 +57,7 @@ private:
 
     CSLSMutex m_mutex;
 
-    int       get_inline(char *data, int size);
+    int       get_inline(uint8_t *data, int size);
 
 };
 

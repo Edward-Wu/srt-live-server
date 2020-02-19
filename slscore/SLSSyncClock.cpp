@@ -22,56 +22,50 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <stdio.h>
 
-#ifndef _SLSClient_INCLUDE_
-#define _SLSClient_INCLUDE_
+#include "SLSSyncClock.hpp"
+#include "common.hpp"
 
-#include <list>
+#define TM_JITTER 1000//ms
 
-#include "SLSRelay.hpp"
-#include "TSFileTimeReader.hpp"
-
-
-/**
- * CSLSClient
- */
-class CSLSClient: public CSLSRelay
+CSLSSyncClock::CSLSSyncClock()
 {
-public :
-	CSLSClient();
-    virtual ~CSLSClient();
+    m_jitter = TM_JITTER;
+	m_begin_ms_rts = -1;
+	m_begin_ms_sys = -1;
+}
 
-    int play(const char *url, const char *out_file_name);
-    int push(const char *url, const char *ts_file_name, bool loop);
+CSLSSyncClock::~CSLSSyncClock()
+{
+}
 
-    virtual int close();
-    virtual int handler();
+int  CSLSSyncClock::wait(int64_t rts_tm_ms)
+{
+	if (-1 == m_begin_ms_rts) {
+		m_begin_ms_rts = rts_tm_ms;
+		m_begin_ms_sys = sls_gettime_ms();
+		return SLS_OK;
+	}
+	int64_t cur_sys_ms = sls_gettime_ms();
+	int64_t sys_passed = cur_sys_ms - m_begin_ms_sys;
+	int64_t rts_passed = rts_tm_ms - m_begin_ms_rts;
+	int64_t d = rts_passed - sys_passed;
+	if (d >= m_jitter || d <= (-1 * m_jitter)) {
+		//jitter
+		m_begin_ms_rts = rts_tm_ms;
+		m_begin_ms_sys = cur_sys_ms;
+		return SLS_OK;
+	}
+    if (d > 0) {
+    	//printf("rts_passed=%lld, sys_passed=%lld, d=%lld\n", rts_passed, sys_passed, d);
+    	msleep(d);
+    }
+    return SLS_OK;
+}
 
-    int64_t get_bitrate();
+void CSLSSyncClock::set_jitter(int v)
+{
+	m_jitter = v;
+}
 
-protected:
-    int init_epoll();
-    int uninit_epoll();
-
-    int open_url(const char* url);
-    int write_data_handler();
-    int read_data_handler();
-
-
-    char  m_url[1024];
-    char  m_ts_file_name[1024];
-    char  m_out_file_name[1024];
-
-    int   m_eid;
-    int   m_out_file;
-
-    int64_t m_data_count;
-    int64_t m_bit_rate;//kbit/s
-
-    CTSFileTimeReader   *m_ts_file_time_reader;
-    CSLSSyncClock        m_sync_clock;
-
-};
-
-
-#endif

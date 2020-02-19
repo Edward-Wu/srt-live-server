@@ -373,7 +373,10 @@ int CHttpClient::send()
     	    m_out_pos = 0;
 		}
 
-        int n = write(m_out_data + m_out_pos, m_out_data_len);
+        int n = write((char*)m_out_data + m_out_pos, m_out_data_len);
+        if (n <= 0) {
+        	break;
+        }
         ret += n;
         if (n < m_out_data_len) {
         	//remainder, maybe net is busy, break
@@ -530,7 +533,7 @@ int CHttpClient::write_http_header(int data_len)
 
 	//int ret = write(http_header.c_str(), http_header.length());
 	int len = http_header.length();
-	int ret = m_out_array.put(http_header.c_str(), len);
+	int ret = m_out_array.put((const uint8_t*)(http_header.c_str()), len);
 	if (len != ret) {
         sls_log(SLS_LOG_INFO, "[%p]CHttpClient::write_http_header, failed, m_out_array.put len=%d, ret=%d, url='%s', http_method='%s'.",
             this, len, ret, m_url, m_http_method);
@@ -550,7 +553,7 @@ int CHttpClient::write_string(std::string *str)
 
 	int len = str->length();
 	if (len > 0) {
-		int ret = m_out_array.put(str->c_str(), len);
+		int ret = m_out_array.put(((const uint8_t*)str->c_str()), len);
 		if (len != ret) {
 			sls_log(SLS_LOG_INFO, "[%p]CHttpClient::write_string, failed, m_out_array.put len=%d, ret=%d.",
 				this, len, ret);

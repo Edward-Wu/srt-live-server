@@ -37,7 +37,7 @@ CSLSArray::CSLSArray()
     m_nWritePos     = 0;
     m_nReadPos      = 0;
     m_nDataCount    = 0;
-    m_arrayData     = new char[m_nDataSize];
+    m_arrayData     = new uint8_t[m_nDataSize];
 
 }
 
@@ -66,7 +66,7 @@ void CSLSArray::setSize(int n)
     m_nWritePos      = 0;
     m_nReadPos       = 0;
     m_nDataCount     = 0;
-    m_arrayData      = new char[m_nDataSize];
+    m_arrayData      = new uint8_t[m_nDataSize];
 }
 
 void CSLSArray::clear()
@@ -76,7 +76,7 @@ void CSLSArray::clear()
     m_nDataCount     = 0;
 }
 
-int CSLSArray::put(const char * data, int len)
+int CSLSArray::put(const uint8_t * data, int len)
 {
     if (NULL == data || len <= 0) {
         sls_log(SLS_LOG_INFO, "[%p]CSLSArray::put, failed, data=%p, len=%d.",
@@ -94,7 +94,7 @@ int CSLSArray::put(const char * data, int len)
         sls_log(SLS_LOG_INFO, "[%p]CSLSArray::put, len=%d is bigger than nRemainder=%d, ext m_nDataSize=%d to ext_len=%d.",
                 this, data, len, m_nDataSize, ext_len);
 
-        char *ext_data = new char[ext_len];
+        uint8_t *ext_data = new uint8_t[ext_len];
         int re = get_inline(ext_data, m_nDataCount);
         memcpy(ext_data + re, data, len);
         delete[] m_arrayData;
@@ -128,13 +128,13 @@ int CSLSArray::put(const char * data, int len)
     return len;
 }
 
-int CSLSArray::get(char *data, int size)
+int CSLSArray::get(uint8_t *data, int size)
 {
     CSLSLock lock(&m_mutex);
 	return get_inline(data, size);
 }
 
-int CSLSArray::get_inline(char *data, int size)
+int CSLSArray::get_inline(uint8_t *data, int size)
 {
     if (NULL == m_arrayData) {
         sls_log(SLS_LOG_INFO, "[%p]CSLSArray::get, failed, m_arrayData is NULL.", this);

@@ -23,55 +23,49 @@
  */
 
 
-#ifndef _SLSClient_INCLUDE_
-#define _SLSClient_INCLUDE_
+#ifndef _TSFileTimeReader_INCLUDE_
+#define _TSFileTimeReader_INCLUDE_
 
-#include <list>
+#include <string.h>
 
-#include "SLSRelay.hpp"
-#include "TSFileTimeReader.hpp"
-
+#include "common.hpp"
+#include "SLSArray.hpp"
+#include "SLSSyncClock.hpp"
 
 /**
- * CSLSClient
+ * CTSFileTimeReader
  */
-class CSLSClient: public CSLSRelay
+class CTSFileTimeReader
 {
 public :
-	CSLSClient();
-    virtual ~CSLSClient();
+	CTSFileTimeReader();
+    ~CTSFileTimeReader();
 
-    int play(const char *url, const char *out_file_name);
-    int push(const char *url, const char *ts_file_name, bool loop);
+public :
+    int  open(const char *ts_file_name, bool loop);
+    int  close();
+    int  get(uint8_t *data, int size, int64_t &tm_ms, bool& jitter);
 
-    virtual int close();
-    virtual int handler();
+    int64_t  generate_rts_file(const char  *ts_file_name);
 
-    int64_t get_bitrate();
+private:
+    char            m_file_name[URL_MAX_LEN];
+    int             m_rts_fd;
+    int             m_dts_pid;
+    int64_t         m_dts;
+    int64_t         m_pts;
+    bool            m_loop;
+    CSLSArray       m_array_data;
+    int64_t         m_udp_duration;
+    int64_t         m_readed_count;
 
-protected:
-    int init_epoll();
-    int uninit_epoll();
-
-    int open_url(const char* url);
-    int write_data_handler();
-    int read_data_handler();
-
-
-    char  m_url[1024];
-    char  m_ts_file_name[1024];
-    char  m_out_file_name[1024];
-
-    int   m_eid;
-    int   m_out_file;
-
-    int64_t m_data_count;
-    int64_t m_bit_rate;//kbit/s
-
-    CTSFileTimeReader   *m_ts_file_time_reader;
-    CSLSSyncClock        m_sync_clock;
+    int      check_sync();
+    int      ts2es(const uint8_t *packet);
+    int      pes2es(int pid, const uint8_t *pesFrame, int64_t &dts, int64_t& pts);
+    int64_t  ff_parse_pes_pts(const uint8_t  *buf);
 
 };
+
 
 
 #endif

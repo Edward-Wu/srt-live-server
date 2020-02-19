@@ -43,16 +43,19 @@
 
 CSLSClient::CSLSClient()
 {
-    memset(m_url, 0, 1024);
-    memset(m_ts_file_name, 0, 1024);
-    memset(m_out_file_name, 0, 1024);
-
     m_eid        = 0;
     m_out_file   = 0;
     m_data_count = 0;
     m_bit_rate   = 0;
 
-    sprintf(m_role_name, "client");
+    m_ts_file_time_reader = NULL;
+    m_invalid_begin_tm = sls_gettime_ms();
+
+	memset(m_url, 0, 1024);
+	memset(m_ts_file_name, 0, 1024);
+	memset(m_out_file_name, 0, 1024);
+
+	sprintf(m_role_name, "client");
 }
 
 CSLSClient::~CSLSClient()
@@ -87,18 +90,19 @@ int CSLSClient::uninit_epoll()
 int CSLSClient::play(const char* url, const char *out_file_name)
 {
     m_is_write = false;
-    if (strlen(out_file_name) > 0) {
+    if (out_file_name != NULL && strlen(out_file_name) > 0) {
     	strcpy(m_out_file_name, out_file_name);
     }
+
 	return open_url(url);
 }
 
 int CSLSClient::open_url(const char* url)
 {
     //
-    if (strlen(url) == 0) {
+    if (url == NULL || strlen(url) == 0) {
     	sls_log(SLS_LOG_INFO, "[%p]CSLSClient::play, url='%s', must like 'srt://hostname:port?streamid=your_stream_id' or 'srt://hostname:port/app/stream_name'.",
-    			this, url);
+    			this, url?url:"null");
         return SLS_ERROR;
     }
 
@@ -121,9 +125,25 @@ int CSLSClient::open_url(const char* url)
     return ret;
 }
 
-int CSLSClient::push(const char* url, const char *ts_file_name)
+int CSLSClient::push(const char* url, const char *ts_file_name, bool loop)
 {
-    return SLS_OK;
+	if (NULL == ts_file_name || strlen(ts_file_name) == 0) {
+        sls_log(SLS_LOG_INFO, "[%p]CSLSClient::push, failed, wrong ts_file_name='%s'.",
+        		this, ts_file_name);
+		return SLS_ERROR;
+	}
+	if (NULL == m_ts_file_time_reader) {
+		m_ts_file_time_reader = new CTSFileTimeReader;
+	}
+	int ret = m_ts_file_time_reader->open(ts_file_name, loop);
+	if (SLS_OK != ret) {
+        sls_log(SLS_LOG_INFO, "[%p]CSLSClient::push, m_ts_file_time_reader->open failed, ts_file_name='%s'.",
+        		this, ts_file_name);
+		return SLS_ERROR;
+	}
+
+    m_is_write = true;
+	return open_url(url);
 }
 
 int CSLSClient::close()
@@ -140,10 +160,75 @@ int CSLSClient::close()
 		uninit_epoll();
 		m_eid = 0;
 	}
+	if (NULL != m_ts_file_time_reader) {
+		delete m_ts_file_time_reader ;
+		m_ts_file_time_reader = NULL;
+	}
     return CSLSRelay::close();
 }
 
 int CSLSClient::handler()
+{
+    if (m_is_write) {
+    	return write_data_handler();
+    }
+    return read_data_handler();
+}
+int CSLSClient::write_data_handler()
+{
+	uint8_t szData[TS_UDP_LEN];
+    SRTSOCKET  read_socks[1];
+    SRTSOCKET  write_socks[1];
+    int read_len   = 0;
+    int write_len  = 1;
+    int64_t tm_ms;
+    bool jitter = false;
+
+	if (NULL == m_srt) {
+		sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::write_data_handler, failed, m_srt is null.", this);
+		return SLS_ERROR;
+	}
+	if (0 == m_eid) {
+		sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::write_data_handler, failed, m_eid = 0.", this);
+		return SLS_ERROR;
+	}
+	//check epoll
+	int ret = srt_epoll_wait(m_eid, read_socks, &read_len, write_socks, &write_len, POLLING_TIME, 0, 0, 0, 0);
+	if (0 > ret) {
+		return SLS_OK;
+	}
+	if (0 >= write_socks[0]) {
+		return SLS_OK;
+	}
+
+	ret = m_ts_file_time_reader->get(szData, TS_UDP_LEN, tm_ms, jitter);
+	if (SLS_OK != ret) {
+		return SLS_ERROR;
+	}
+	//write data
+	int n = m_srt->libsrt_write((char *)szData, TS_UDP_LEN);
+	if (n <= 0) {
+		sls_log(SLS_LOG_TRACE, "[%p]CSLSClient::write_data_handler, libsrt_read failure, n=%d.", this, n, TS_UDP_LEN);
+        int state = get_state();
+        if (SLS_RS_INVALID == state || SLS_RS_UNINIT == state)
+		{
+		    return SLS_ERROR;
+		}
+	}
+	m_sync_clock.wait(tm_ms);
+
+    m_data_count += n;
+    int64_t cur_tm = sls_gettime_ms();
+    int d = cur_tm - m_invalid_begin_tm;
+    if (d >= 500) {
+        m_bit_rate = m_data_count*8/d;
+        m_data_count = 0;
+        m_invalid_begin_tm = sls_gettime_ms();
+    }
+	return n;
+}
+
+int CSLSClient::read_data_handler()
 {
 	char szData[TS_UDP_LEN];
     SRTSOCKET  read_socks[1];
@@ -157,11 +242,11 @@ int CSLSClient::handler()
 	} else {
 		//play
 		if (NULL == m_srt) {
-	        sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::handler, failed, m_srt is null.", this);
+	        sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::read_data_handler, failed, m_srt is null.", this);
 		    return SLS_ERROR;
 		}
 		if (0 == m_eid) {
-	        sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::handler, failed, m_eid = 0.", this);
+	        sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::read_data_handler, failed, m_eid = 0.", this);
 		    return SLS_ERROR;
 		}
 	    read_len = 1;
@@ -177,7 +262,7 @@ int CSLSClient::handler()
 	    //read data
 	    int n = m_srt->libsrt_read(szData, TS_UDP_LEN);
 		if (n <= 0) {
-	        sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::handler, libsrt_read failure, n=%d.", this, n, TS_UDP_LEN);
+	        sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::read_data_handler, libsrt_read failure, n=%d.", this, n, TS_UDP_LEN);
 		    return SLS_OK;
 		}
 
@@ -188,7 +273,7 @@ int CSLSClient::handler()
 			if (strlen(m_out_file_name) > 0) {
 				m_out_file = ::open(m_out_file_name, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
 			    if (0 == m_out_file) {
-			    	sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::handler, open file='%s' failed, '%s'.\n", m_out_file_name, strerror(errno));
+			    	sls_log(SLS_LOG_ERROR, "[%p]CSLSClient::read_data_handler, open file='%s' failed, '%s'.\n", m_out_file_name, strerror(errno));
 			    	return SLS_ERROR;
 			    }
 			}
@@ -198,7 +283,7 @@ int CSLSClient::handler()
         }
         m_data_count += n;
         int64_t cur_tm = sls_gettime_ms();
-        int d = (cur_tm - m_invalid_begin_tm)/1000;
+        int d = cur_tm - m_invalid_begin_tm;
         if (d >= 500) {
             m_bit_rate = m_data_count*8/d;
             m_data_count = 0;
@@ -206,7 +291,7 @@ int CSLSClient::handler()
         }
 
 		if (n != TS_UDP_LEN) {
-	        sls_log(SLS_LOG_INFO, "[%p]CSLSClient::handler, libsrt_read n=%d, expect %d.", this, n, TS_UDP_LEN);
+	        sls_log(SLS_LOG_INFO, "[%p]CSLSClient::read_data_handler, libsrt_read n=%d, expect %d.", this, n, TS_UDP_LEN);
 	    }
 		return n;
 	}

@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 using namespace std;
 
@@ -73,6 +74,7 @@ using namespace std;
 #define SAFE_DELETE(p) {if (p) { delete p; p = NULL; }}
 #define msleep(ms) usleep(ms*1000)
 
+#define TS_PACK_LEN 188
 #define TS_UDP_LEN 1316//7*188
 #define STR_MAX_LEN 1024
 #define URL_MAX_LEN STR_MAX_LEN

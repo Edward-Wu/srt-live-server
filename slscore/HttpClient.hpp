@@ -89,7 +89,7 @@ protected:
 	int         m_interval;//s
 
 	CSLSArray   m_out_array;
-    char        m_out_data[HTTP_DATA_SIZE];
+	uint8_t     m_out_data[HTTP_DATA_SIZE];
     int         m_out_pos      ;
     int         m_out_data_len ;
 

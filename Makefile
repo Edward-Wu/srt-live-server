@@ -1,6 +1,6 @@
 SHELL = /bin/sh
 MAIN_NAME=sls
-CLIENT_NAME=sls_client
+CLIENT_NAME=slc
 INC_PATH = -I./ -I../ -I./slscore -I./include
 LIB_PATH =  -L ./lib
 LIBRARY_FILE = -lpthread -lz -lsrt
@@ -40,7 +40,9 @@ OBJS = $(OUTPUT_PATH)/SLSLog.o \
 	$(OUTPUT_PATH)/TCPRole.o\
 	$(OUTPUT_PATH)/SLSArray.o\
 	$(OUTPUT_PATH)/HttpRoleList.o\
-	$(OUTPUT_PATH)/HttpClient.o			
+	$(OUTPUT_PATH)/HttpClient.o\
+	$(OUTPUT_PATH)/SLSSyncClock.o\
+	$(OUTPUT_PATH)/TSFileTimeReader.o
 	
 CORE_PATH = slscore
 COMMON_FILES = common.hpp
@@ -137,6 +139,12 @@ $(OUTPUT_PATH)/HttpRoleList.o: ./$(CORE_PATH)/HttpRoleList.cpp
 	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
 
 $(OUTPUT_PATH)/HttpClient.o: ./$(CORE_PATH)/HttpClient.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/SLSSyncClock.o: ./$(CORE_PATH)/SLSSyncClock.cpp 
+	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
+
+$(OUTPUT_PATH)/TSFileTimeReader.o: ./$(CORE_PATH)/TSFileTimeReader.cpp 
 	g++ -c $(CFLAGS) $< -o $@ $(INC_PATH)
 
 clean:
