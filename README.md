@@ -72,10 +72,10 @@ v1.3
 v1.4
 1. add http statistic info.
 2. add http event notification, on_connect, on_close.
-3. add srt-live-client tool for pressure test.
+3. add player feature to slc(srt-live-client) tool for pressure test.
 
 v1.4.1
-1. add push ts file through slc tool.
+1. add publisher feather to slc(srt-live-client) tool, which can push ts file with srt according dts.
 2. modify the http bug when host is not available.
 
 
