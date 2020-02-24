@@ -37,32 +37,36 @@
 
 CSLSRole::CSLSRole()
 {
-    m_latency          = 10; //default 10ms
-	m_srt              = NULL;
-	m_state            = SLS_RS_UNINIT;
-	m_back_log         = 1024;
-	m_is_write         = 1;
+    m_srt                    = NULL;
+    m_is_write               = true;//listener: 0, publisher: 0, player: 1
+    m_invalid_begin_tm       = sls_gettime_ms();//
+    m_stat_bitrate_last_tm   = m_invalid_begin_tm;//
+    m_stat_bitrate_interval  = 1000;//ms
+    m_stat_bitrate_datacount = 0;
+    m_kbitrate               = 0;//kb
+    m_idle_streams_timeout   = 10;//unit: s, -1: unlimited
+    m_latency                = 20;//ms
 
-    m_conf             = NULL;
-    m_map_data         = NULL;        // role:data'
-
-    m_invalid_begin_tm          = sls_gettime_ms();
-    m_stat_bitrate_last_tm      = m_invalid_begin_tm;
-    m_stat_bitrate_interval     = 1000;//ms
-    m_stat_bitrate_datacount    = 0;
-	m_idle_streams_timeout = 10; //unit :s
-
-    m_data_len = 0;
-    m_data_pos = 0;
-
-    m_need_reconnect = false;
-    m_http_client    = NULL;
-    m_http_passed    = true;
-
-    memset(m_map_data_key, 0, URL_MAX_LEN);
-    memset(m_http_url, 0, URL_MAX_LEN);
+    m_state        = SLS_RS_UNINIT;
+    m_back_log     = 1024;//maximum number of connections at the same time
+    m_port         = 0;
+    memset(m_peer_ip, 0, IP_MAX_LEN);
+    m_peer_port  = 0;
+    memset(m_role_name, 0, STR_MAX_LEN);
     memset(m_streamid, 0, URL_MAX_LEN);
+    memset(m_http_url, 0, URL_MAX_LEN);
+    m_http_passed  = true;
 
+    m_conf         = NULL;
+    m_map_data     = NULL;
+    memset(m_map_data_key, 0, URL_MAX_LEN);
+    memset(&m_map_data_id, 0, sizeof(SLSRecycleArrayID));
+
+    memset(m_data, 0, DATA_BUFF_SIZE);
+    m_data_len        = 0;
+    m_data_pos        = 0;
+    m_need_reconnect  = false;
+    m_http_client     = NULL;
 
 	sprintf(m_role_name, "role");
 }
@@ -433,8 +437,11 @@ int  CSLSRole::on_connect()
 	}
 
 	char on_event_url[URL_MAX_LEN] = {0};
-	sprintf(on_event_url, "%s?on_event=on_connect&role_name=%s&srt_url=%s",
-			m_http_url, m_role_name, get_streamid());
+	if (strlen(m_peer_ip) == 0) {
+		get_peer_info(m_peer_ip, m_peer_port);
+	}
+	sprintf(on_event_url, "%s?on_event=on_connect&role_name=%s&srt_url=%s&remote_ip=%s&remote_port=%d",
+			m_http_url, m_role_name, get_streamid(), m_peer_ip, m_peer_port);
 
 	return m_http_client->open(on_event_url);
 }
@@ -452,8 +459,11 @@ int  CSLSRole::on_close()
 	}
 
 	char on_event_url[URL_MAX_LEN] = {0};
-	sprintf(on_event_url, "%s?on_event=on_close&role_name=%s&srt_url=%s",
-			m_http_url, m_role_name, get_streamid());
+	if (strlen(m_peer_ip) == 0) {
+		get_peer_info(m_peer_ip, m_peer_port);
+	}
+	sprintf(on_event_url, "%s?on_event=on_close&role_name=%s&srt_url=%s&remote_ip=%s&remote_port=%d",
+			m_http_url, m_role_name, get_streamid(), m_peer_ip, m_peer_port);
 
 	int ret = m_http_client->open(on_event_url);
 	return ret;

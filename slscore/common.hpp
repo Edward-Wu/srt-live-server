@@ -79,7 +79,10 @@ using namespace std;
 #define STR_MAX_LEN 1024
 #define URL_MAX_LEN STR_MAX_LEN
 #define STR_DATE_TIME_LEN 32
-#define IP_MAX_LEN 32
+#define INET_ADDRSTRLEN 16
+#define INET6_ADDRSTRLEN 46
+#define IP_MAX_LEN INET6_ADDRSTRLEN
+
 
 
 int64_t sls_gettime_ms(void);//rturn millisecond

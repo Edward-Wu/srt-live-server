@@ -99,7 +99,7 @@ public :
     int         check_http_passed();
 
 protected:
-    CSLSSrt    * m_srt;
+    CSLSSrt     *m_srt;
     bool         m_is_write;//listener: 0, publisher: 0, player: 1
     int64_t      m_invalid_begin_tm;//
     int64_t      m_stat_bitrate_last_tm;//
@@ -112,14 +112,15 @@ protected:
     int          m_state;
     int          m_back_log;//maximum number of connections at the same time
     int          m_port;
-    char         m_role_name[256];
+    char         m_peer_ip[IP_MAX_LEN];
+    int          m_peer_port;
+    char         m_role_name[STR_MAX_LEN];
     char         m_streamid[URL_MAX_LEN];
     char         m_http_url[URL_MAX_LEN];
     bool         m_http_passed;
 
-    sls_conf_base_t   * m_conf;
-
-    CSLSMapData       * m_map_data;
+    sls_conf_base_t    *m_conf;
+    CSLSMapData        *m_map_data;
     char                m_map_data_key[URL_MAX_LEN];
     SLSRecycleArrayID   m_map_data_id;
 
