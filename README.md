@@ -78,5 +78,9 @@ v1.4.1
 1. add publisher feather to slc(srt-live-client) tool, which can push ts file with srt according dts.
 2. modify the http bug when host is not available.
 
+v1.4.2
+1. add remote_ip and remote_port to on_event_url which can be as the unique identification for player or publisher.
+
+
 
 
