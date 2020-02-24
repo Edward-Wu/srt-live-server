@@ -46,6 +46,10 @@ $ ./ffmpeg -f avfoundation -framerate 30 -i "0:0" -vcodec libx264  -preset ultra
 2.play the SRT stream with ffplay:
 ./ffplay -fflag nobuffer -i "srt://[your.sls.ip]:8080?streamid=live.sls.com/live/test"
 
+3.test with srt-live-client
+there is a test tool in sls, which can be used performance test because of no codec overhead but main network overhead. the slc can play a srt stream to a ts file, or push a ts file to a srt stream.
+
+
 Note:
 
 1.SLS refer to the RTMP url format(domain/app/stream_name), example: www.sls.com/live/test. The url of SLS must be set in streamid parameter of SRT, which will be the unique identification a stream.
