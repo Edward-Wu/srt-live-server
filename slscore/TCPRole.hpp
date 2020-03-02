@@ -41,7 +41,6 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
-#include <sys/epoll.h>
 
 #include "conf.hpp"
 
@@ -66,8 +65,6 @@ public :
 
     int         write(const char *buf, int size);
     int         read(char *buf, int size);
-    int         epoll_write(const char *buf, int size);
-    int         epoll_read(char *buf, int size);
 
     char       *get_role_name();
     int         set_nonblock();
@@ -81,15 +78,10 @@ protected:
     char        m_remote_host[256];
     int         m_remote_port;
     bool        m_valid;
-    int         m_eid;
 
     int         setup();
     int         listen(int port, int backlog);
     int         connect(char *host, int port);
-    int         init_epoll();
-    int         uninit_epoll();
-    int         add_to_epoll(bool readable=true, bool writable=true);
-    int         remove_from_epoll();
 
 };
 

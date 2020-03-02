@@ -39,7 +39,6 @@ CTCPRole::CTCPRole()
     m_port        = 0;
     m_remote_port = 0;
     m_valid       = false;
-    m_eid         = 0;
 
     strcpy(m_remote_host, "");
     sprintf(m_role_name, "tcp_role");
@@ -56,24 +55,6 @@ int CTCPRole::handler(DATA_PARAM *p)
 	return ret;
 }
 
-int CTCPRole::epoll_write(const char * buf, int size)
-{
-	int ret = 0;
-	int ev = 0;
-	int ready_count = 0;
-	struct epoll_event  ready_events[MAX_TCP_SOCK_COUNT];
-	int timeout = 10;//10ms
-
-	ready_count = epoll_wait(m_eid, ready_events, MAX_TCP_SOCK_COUNT, timeout);//等待事件发生
-    if (ready_count <= 0 || ready_events[0].data.fd != m_fd) {
-        return 0;
-    }
-    bool readable = ev & EPOLLIN;
-    if (readable)
-	    return write(buf, size);
-    return 0;
-}
-
 int CTCPRole::write(const char * buf, int size)
 {
 	int len = 0;
@@ -84,28 +65,6 @@ int CTCPRole::write(const char * buf, int size)
 
 	}
     return len;
-}
-
-int CTCPRole::epoll_read(char * buf, int size)
-{
-	int ret = 0;
-	int ev = 0;
-	int ready_count = 0;
-	struct epoll_event  ready_events[MAX_TCP_SOCK_COUNT];
-	int timeout = 10;//10ms
-
-	ready_count = epoll_wait(m_eid, ready_events, MAX_TCP_SOCK_COUNT, timeout);//等待事件发生
-    if (ready_count <= 0 || ready_events[0].data.fd != m_fd) {
-        return 0;
-    }
-    bool readable = ev & EPOLLOUT;
-    if (readable) {
-	    ret = read(buf, size);
-        remove_from_epoll();
-		//trigger EPOLLOUT event.
-		add_to_epoll();
-    }
-    return ret;
 }
 
 int CTCPRole::read(char * buf, int size)
@@ -289,82 +248,6 @@ int CTCPRole::close() {
     ::close(m_fd);
     m_fd = 0;
     m_valid = false;
-    return SLS_OK;
-}
-
-int CTCPRole::init_epoll()
-{
-    int ret = 0;
-    m_eid = epoll_create(MAX_TCP_SOCK_COUNT);
-    if (m_eid <= 0) {
-        sls_log(SLS_LOG_ERROR, "[%p]CTCPRole::init_epoll, epoll_create failed.", this);
-        return SLS_ERROR;
-    }
-    sls_log(SLS_LOG_INFO, "[%p]CTCPRole::init_epoll, ok, m_eid=%d.", this, m_eid);
-    return SLS_OK;
-}
-
-int CTCPRole::uninit_epoll()
-{
-    int ret = 0;
-    if (m_eid <= 0) {
-        sls_log(SLS_LOG_TRACE, "[%p]CTCPRole::uninit_epoll, failed, m_eid=%d.", this, m_eid);
-        return SLS_OK;
-    }
-    sls_log(SLS_LOG_INFO, "[%p]CTCPRole::uninit_epoll, uninit_epoll ok.", this);
-    ::close(m_eid);
-    m_eid = 0;
-    return ret;
-}
-
-int CTCPRole::add_to_epoll(bool readable, bool writable)
-{
-    if (m_eid <= 0) {
-        sls_log(SLS_LOG_ERROR, "[%p]CTCPRole::add_to_epoll failure, m_eid=%d.",
-        		this, m_eid);
-        return SLS_ERROR;
-    }
-    if (m_fd <= 0) {
-        sls_log(SLS_LOG_ERROR, "[%p]CTCPRole::add_to_epoll failure, m_fd=%d.",
-        		this, m_fd);
-        return SLS_ERROR;
-    }
-
-    struct epoll_event ev;
-    ev.data.fd = m_fd;
-    ev.events = EPOLLET | EPOLLERR;
-    if (readable)
-        ev.events |= EPOLLIN;
-    if (writable)
-        ev.events |= EPOLLOUT;
-    int ret = epoll_ctl(m_eid, EPOLL_CTL_ADD, m_fd, &ev);
-    if (ret != 0) {
-        sls_log(SLS_LOG_ERROR, "[%p]CTCPRole::add_to_epoll, epoll_ctl failed, ret=%d, m_eid=%d, fd=%d, ev.events=0x%x.",
-        		this, ret, m_eid, m_fd, ev.events);
-        return SLS_ERROR;
-    }
-    return SLS_OK;
-}
-
-int CTCPRole::remove_from_epoll()
-{
-    if (m_eid <= 0) {
-        sls_log(SLS_LOG_TRACE, "[%p]CTCPRole::remove_from_epoll failure, m_eid=%d.",
-        		this, m_eid);
-        return SLS_OK;
-    }
-    if (m_fd <= 0) {
-        sls_log(SLS_LOG_TRACE, "[%p]CTCPRole::remove_from_epoll failure, m_fd=%d.",
-        		this, m_fd);
-        return SLS_OK;
-    }
-
-    int ret = epoll_ctl(m_eid, EPOLL_CTL_DEL, m_fd, NULL);
-    if (ret != 0) {
-        sls_log(SLS_LOG_INFO, "[%p]CTCPRole::remove_from_epoll, epoll_ctl failed, maybe invalid sock, ret=%d, fd=%d.",
-        		this, ret, m_fd);
-        return SLS_ERROR;
-    }
     return SLS_OK;
 }
 

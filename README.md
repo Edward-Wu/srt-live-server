@@ -91,6 +91,9 @@ v1.4.1
 v1.4.2
 1. add remote_ip and remote_port to on_event_url which can be as the unique identification for player or publisher.
 
+v1.4.3
+1. change the tcp'epoll mode to select mode for compatible MAC os.
+2. modify the http check repeat bug for reopen.  
 
 
 

@@ -120,18 +120,6 @@ int  CHttpClient::open(const char *url, const char *method, int interval)
         		this, m_remote_host, m_remote_port);
 		goto FUNC_END;
     }
-    ret = init_epoll();
-    if (SLS_OK != ret) {
-        sls_log(SLS_LOG_INFO, "[%p]CHttpClient::open, init_epoll failed, remote_host='%s', remote_port=%d.",
-        		this, m_remote_host, m_remote_port);
-		goto FUNC_END;
-    }
-    ret = add_to_epoll();
-    if (SLS_OK != ret) {
-        sls_log(SLS_LOG_INFO, "[%p]CHttpClient::open, add_to_epoll failed, remote_host='%s', remote_port=%d.",
-        		this, m_remote_host, m_remote_port);
-		goto FUNC_END;
-    }
     //send data
     handler();
 FUNC_END:
@@ -146,18 +134,6 @@ int  CHttpClient::close()
 	int ret = SLS_OK;
     sls_log(SLS_LOG_TRACE, "[%p]CHttpClient::close, m_url='%s', m_response_content_length=%d.",
     		this, m_url, m_response_info.m_response_content_length);
-
-    ret = remove_from_epoll();
-    if (SLS_OK != ret) {
-        sls_log(SLS_LOG_INFO, "[%p]CHttpClient::close, remove_from_epoll failed, remote_host='%s', remote_port=%d.",
-        		this, m_remote_host, m_remote_port);
-    }
-    ret = uninit_epoll();
-    if (SLS_OK != ret) {
-        sls_log(SLS_LOG_INFO, "[%p]CHttpClient::close, uninit_epoll failed, remote_host='%s', remote_port=%d.",
-        		this, m_remote_host, m_remote_port);
-    }
-
     ret = CTCPRole::close();
 	if (NULL != m_callback) {
 		m_callback(this, HCT_CLOSE, &ret, m_callback_context);
@@ -209,9 +185,6 @@ int  CHttpClient::check_timeout(int64_t cur_tm_ms)
 
 int  CHttpClient::check_repeat(int64_t cur_tm_ms)
 {
-	if (0 == m_fd) {
-		return SLS_ERROR;
-	}
 	if (m_interval <= 0) {
 		//no repeat
 		return SLS_ERROR;
@@ -412,33 +385,47 @@ int CHttpClient::handler(DATA_PARAM *p)
 
 int CHttpClient::handler()
 {
-	int ret = 0;
-	int ready_count = 0;
-	struct epoll_event  ready_events[1];
-	int timeout = 10;//10ms
+    int ret = 0;
+    int timeout = 10;//10ms
 
-	if (!m_valid)
-		return 0;
-	ready_count = epoll_wait(m_eid, ready_events, 1, timeout);//等待事件发生
-    if (ready_count <= 0 || ready_events[0].data.fd != m_fd) {
+    int sfd = m_fd;
+    fd_set read_fds;
+    fd_set write_fds;
+    struct timeval tout;
+    int max_sockfd;
+
+    FD_ZERO(&read_fds);
+    FD_SET(sfd, &read_fds);
+    FD_ZERO(&write_fds);
+    FD_SET(sfd, &write_fds);
+    max_sockfd = sfd;
+
+    if (!m_valid)
         return 0;
+    tout.tv_sec = 0;
+    tout.tv_usec = timeout * 1000;
+    ret = select (max_sockfd + 1, &read_fds, &write_fds, NULL, &tout);
+    if (ret == 0) {
+        return SLS_OK;
     }
-    bool readable = ready_events[0].events & EPOLLIN;
-    bool writable = ready_events[0].events & EPOLLOUT;
-    if (writable) {
-    	send();
-    }
-    if (readable) {
-    	recv();
+    if (ret == -1) {
+        sls_log(SLS_LOG_INFO, "[%p]CHttpClient::handler, ret=%d, errno=%d, err='%s'",
+                this, ret, errno, strerror(errno));
+        return SLS_ERROR;
     }
 
-    //trigger EPOLLOUT event again.
-    remove_from_epoll();
-    add_to_epoll();
-
-	return ret;
+    //write is ready?
+    if(FD_ISSET(sfd, &write_fds)){
+        send();
+    }
+    //read is ready?
+    if(FD_ISSET(sfd, &read_fds)){
+        recv();
+    }
+    return SLS_OK;
 }
 
+ 
 
 int CHttpClient::parse_url()
 {
