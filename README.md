@@ -1,26 +1,31 @@
 Introduction
+============
 
 srt-live-server(SLS) is an open source live streaming server for low latency based on Secure Reliable Tranport(SRT).
 Normally, the latency of transport by SLS is less than 1 second in internet.
 
 
 Requirements
+============
 
 please install the SRT first, refer to SRT(https://github.com/Haivision/srt) for system enviroment.
 SLS can only run on OS based on linux, such as mac, centos or ubuntu etc.
 
-Complie
+Compile
+=======
 
 $ sudo make
 
 bin file is generated in subdir of 'bin'.
 
 Directivies
+===========
 
 about the config file, please see the wiki:
 https://github.com/Edward-Wu/srt-live-server/wiki/Directives
 
 Usage
+=====
 
 $ cd bin
 
@@ -31,6 +36,7 @@ $ ./sls -h
 $ ./sls -c ../sls.conf
 
 Test
+====
 
 SLS only supports the MPEG-TS format streaming. 
 
@@ -67,6 +73,7 @@ there is a test tool in sls, which can be used performance test because of no co
 
 
 Note:
+=====
 
 1.SLS refer to the RTMP url format(domain/app/stream_name), example: www.sls.com/live/test. The url of SLS must be set in streamid parameter of SRT, which will be the unique identification a stream.
 
@@ -75,6 +82,7 @@ Note:
 3.I supply a simple android app for test sls, your can download from https://github.com/Edward-Wu/liteplayer-srt
 
 ReleaseNote
+============
 
 v1.2
 1. update the memory mode, in v1.1 which is publisher copy data to eacc player, in v1.2 each publisher put data to a array and all players read data from this array.
