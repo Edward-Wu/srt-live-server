@@ -30,9 +30,11 @@ Usage
 $ cd bin
 
 1.help information
+------------------
 $ ./sls -h
 
 2.run with default config file
+------------------------------
 $ ./sls -c ../sls.conf
 
 Test
@@ -41,6 +43,7 @@ Test
 SLS only supports the MPEG-TS format streaming. 
 
 1.test with ffmpeg
+------------------
 
 you can push camera live stream by FFMPEG.Please download ffmpeg sourcecode from https://github.com/FFmpeg/FFmpeg, then compile FFMPEG with --enable-libsrt. 
 
@@ -62,12 +65,14 @@ play the SRT stream with ffplay:
 
 
 2.test with OBS
+---------------
 
 the OBS supports srt protocol to publish stream when version is later than v25.0. you can use the following url:
 srt://[your.sls.ip]:8080?streamid=uplive.sls.com/live/test
 whith custom service.
 
 3.test with srt-live-client
+---------------------------
 
 there is a test tool in sls, which can be used performance test because of no codec overhead but main network overhead. the slc can play a srt stream to a ts file, or push a ts file to a srt stream.
 
@@ -85,35 +90,43 @@ ReleaseNote
 ============
 
 v1.2
+----
 1. update the memory mode, in v1.1 which is publisher copy data to eacc player, in v1.2 each publisher put data to a array and all players read data from this array.
 2. update the relation of the publisher and player, the player is not a member of publisher. the only relation of them is array data.
 3. add push and pull features, support all and hash mode for push, support loop and hash for pull. in cluster mode, you can push a stream to a hash node, and pull this stream from the same hash node.
 
 v1.2.1
+------
 1. support hostname:port/app in upstreams of pull and push.
 
 v1.3
+----
 1. support reload.
 2. add idle_streams_timeout feature for relay.
 3. change license type from gpl to mit.
 
 v1.4
+----
 1. add http statistic info.
 2. add http event notification, on_connect, on_close.
 3. add player feature to slc(srt-live-client) tool for pressure test.
 
 v1.4.1
+------
 1. add publisher feather to slc(srt-live-client) tool, which can push ts file with srt according dts.
 2. modify the http bug when host is not available.
 
 v1.4.2
+------
 1. add remote_ip and remote_port to on_event_url which can be as the unique identification for player or publisher.
 
 v1.4.3
+------
 1. change the tcp'epoll mode to select mode for compatible MAC os.
 2. modify the http check repeat bug for reopen.  
 
 v1.4.4
+------
 1. OBS streaming compatible, OBS support the srt protocol which is later than v25.0.
 (https://obsproject.com/forum/threads/obs-studio-25-0-release-candidate.116067/)
 
