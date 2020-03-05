@@ -24,8 +24,8 @@
 
 
 #include <errno.h>
+#include <fcntl.h>
 #include <string.h>
-
 
 #include "SLSMapData.hpp"
 #include "SLSLog.hpp"
@@ -126,7 +126,7 @@ int CSLSMapData::put(char *key, char *data, int len, int64_t *last_read_time)
     std::string strKey = std::string(key);
 
     std::map<std::string, CSLSRecycleArray *>::iterator item;
-    item = m_map_array.find(key);
+    item = m_map_array.find(strKey);
     if (item == m_map_array.end()) {
         sls_log(SLS_LOG_ERROR, "[%p]CSLSMapData::put, key=%s, not found data array.",
                 this, key);
@@ -138,6 +138,21 @@ int CSLSMapData::put(char *key, char *data, int len, int64_t *last_read_time)
                 this, key);
     }
 
+    /*//for test, in future, add the record feature.
+    //save data
+    static char out_file_name[URL_MAX_LEN] = {0};
+    if (strlen(out_file_name) == 0) {
+        char cur_tm[256];
+        sls_gettime_default_string(cur_tm);
+        sprintf(out_file_name, "./obs_%s.ts", cur_tm);
+    }
+    static int fd_out = open(out_file_name, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+
+    if (0 != fd_out) {
+        write(fd_out, data, len);
+    }
+    */
+
     ret = array_data->put(data, len);
     if (ret != len) {
         sls_log(SLS_LOG_ERROR, "[%p]CSLSMapData::put, key=%s, array_data->put failed, len=%d, but ret=%d.",
@@ -146,10 +161,29 @@ int CSLSMapData::put(char *key, char *data, int len, int64_t *last_read_time)
     if (NULL != last_read_time) {
         *last_read_time = array_data->get_last_read_time();
     }
+
+    //check sps and pps
+    ts_info *ti = NULL;
+    std::map<std::string, ts_info *>::iterator item_ti;
+    item_ti = m_map_ts_info.find(strKey);
+    if (item_ti == m_map_ts_info.end()) {
+        ti = new ts_info;
+        sls_init_ts_info(ti);
+        ti->need_spspps = true;
+        m_map_ts_info[strKey] = ti;
+    }else{
+        ti = item_ti->second;
+    }
+
+    if (SLS_OK == check_ts_info(data, len, ti)) {
+        sls_log(SLS_LOG_INFO, "[%p]CSLSMapData::put, check_spspps ok, key=%s.",
+                this, key);
+    }
+
     return ret;
 }
 
-int CSLSMapData::get(char *key, char *data, int len, SLSRecycleArrayID *read_id)
+int CSLSMapData::get(char *key, char *data, int len, SLSRecycleArrayID *read_id, int aligned)
 {
     int ret = SLS_OK;
 
@@ -170,7 +204,21 @@ int CSLSMapData::get(char *key, char *data, int len, SLSRecycleArrayID *read_id)
         return SLS_ERROR;
     }
 
-    ret = array_data->get(data, len, read_id);
+    bool b_first = read_id->bFirst;
+    ret = array_data->get(data, len, read_id, aligned);
+    if (b_first) {
+        //get sps and pps
+        ts_info *ti = NULL;
+        std::map<std::string, ts_info *>::iterator item_ti;
+        item_ti = m_map_ts_info.find(strKey);
+        if (item_ti != m_map_ts_info.end()) {
+            ti = item_ti->second;
+            memcpy(data, ti->ts_data, TS_UDP_LEN);
+            ret = TS_UDP_LEN;
+            sls_log(SLS_LOG_INFO, "[%p]CSLSMapData::get, get sps pps ok, key=%s, len=%d.",
+                    this, key, ret);
+        }
+    }
     return ret;
 }
 
@@ -188,5 +236,18 @@ void CSLSMapData::clear()
     m_map_array.clear();
 }
 
+int CSLSMapData::check_ts_info(char *data, int len, ts_info *ti)
+{
+    //only get the first, suppose the sps and pps are not changed always.
+    for (int i = 0; i < len;) {
+        if (ti->sps_len > 0 && ti->pps_len > 0 && ti->pat_len > 0 && ti->pat_len > 0) {
+            break;
+        }
+        sls_parse_ts_info((const uint8_t *)data + i, ti);
+        i += TS_PACK_LEN;
+    }
+
+    return SLS_ERROR;
+}
 
 

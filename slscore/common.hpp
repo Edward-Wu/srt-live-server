@@ -75,7 +75,7 @@ using namespace std;
 #define msleep(ms) usleep(ms*1000)
 
 #define TS_PACK_LEN 188
-#define TS_UDP_LEN 1316//7*188
+#define TS_UDP_LEN 1316 //7*188
 #define STR_MAX_LEN 1024
 #define URL_MAX_LEN STR_MAX_LEN
 #define STR_DATE_TIME_LEN 32
@@ -90,6 +90,7 @@ int64_t sls_gettime(void);//rturn microsecond
 void    sls_gettime_fmt(char *dst, int64_t cur_time_sec, char *fmt);
 void    sls_gettime_default_string(char *cur_time);
 char  * sls_strupper(char * str);
+void    sls_remove_marks(char *s);
 
 uint32_t sls_hash_key(const char *data, int len);
 int      sls_gethostbyname(const char *hostname, char *ip);
@@ -101,5 +102,38 @@ int sls_send_cmd(const char *cmd);
 
 void sls_split_string(std::string str, std::string separator, std::vector<std::string> &result, int count=-1);
 std::string sls_find_string(std::vector<std::string> &src, std::string &dst);
+
+
+/*
+ * parse ts packet
+ */
+
+#define TS_SYNC_BYTE 0x47
+#define TS_PACK_LEN 188
+#define INVALID_PID -1
+#define PAT_PID 0
+#define INVALID_DTS_PTS -1
+#define MAX_PES_PAYLOAD 200 * 1024
+
+typedef struct ts_info {
+    int      es_pid;
+    int64_t  dts;
+    int64_t  pts;
+    bool     need_spspps;
+    int      sps_len;
+    uint8_t  sps[TS_PACK_LEN];
+    int      pps_len;
+    uint8_t  pps[TS_PACK_LEN];
+    uint8_t  ts_data[TS_UDP_LEN];
+    uint8_t  pat[TS_PACK_LEN];
+    int      pat_len;
+    int      pmt_pid;
+    uint8_t  pmt[TS_PACK_LEN];
+    int      pmt_len;
+
+};
+void sls_init_ts_info(ts_info *ti);
+int  sls_parse_ts_info(const uint8_t *packet, ts_info *ti);
+
 
 #endif

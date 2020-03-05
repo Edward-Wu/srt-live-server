@@ -106,7 +106,7 @@ int CSLSRecycleArray::put(char * data, int len)
     return len;
 }
 
-int CSLSRecycleArray::get(char *data, int size, SLSRecycleArrayID *read_id)
+int CSLSRecycleArray::get(char *data, int size, SLSRecycleArrayID *read_id, int aligned)
 {
     if (NULL == m_arrayData) {
         sls_log(SLS_LOG_INFO, "[%p]CSLSRecycleArray::get, failed, m_arrayData is NULL.", this);
@@ -143,24 +143,34 @@ int CSLSRecycleArray::get(char *data, int size, SLSRecycleArrayID *read_id)
         //read pos is behind in the write pos
         ready_data_len = m_nWritePos - read_id->nReadPos;
         copy_data_len = ready_data_len <= size ? ready_data_len : size;
+        if (aligned > 0) {
+            copy_data_len = copy_data_len/aligned * aligned;
+        }
         //sls_log(SLS_LOG_TRACE, "[%p]CSLSRecycleArray::get, read pos is behind in the write pos, copy_data_len=%d, ready_data_len=%d, size=%d.",
         //		this, copy_data_len, ready_data_len, size);
-        memcpy(data, m_arrayData + read_id->nReadPos, copy_data_len);
-        read_id->nReadPos += copy_data_len;
+        if (copy_data_len > 0) {
+            memcpy(data, m_arrayData + read_id->nReadPos, copy_data_len);
+            read_id->nReadPos += copy_data_len;
+        }
     } else {
         ready_data_len = m_nDataSize - read_id->nReadPos + m_nWritePos;
         copy_data_len = ready_data_len <= size ? ready_data_len : size;
+        if (aligned > 0) {
+            copy_data_len = copy_data_len/aligned * aligned;
+        }
         //sls_log(SLS_LOG_TRACE, "[%p]CSLSRecycleArray::get, read pos is before of the write pos, copy_data_len=%d, ready_data_len=%d, size=%d.",
         //		this, copy_data_len, ready_data_len, size);
-        if (m_nDataSize - read_id->nReadPos >= copy_data_len) {
-            //no wrap round
-            memcpy(data, m_arrayData + read_id->nReadPos, copy_data_len);
-            read_id->nReadPos += copy_data_len;
-        } else {
-            memcpy(data, m_arrayData + read_id->nReadPos, m_nDataSize - read_id->nReadPos);
-            //wrap around
-            memcpy(data + (m_nDataSize - read_id->nReadPos), m_arrayData, copy_data_len - (m_nDataSize - read_id->nReadPos));
-            read_id->nReadPos = copy_data_len - (m_nDataSize - read_id->nReadPos);
+        if (copy_data_len > 0) {
+            if (m_nDataSize - read_id->nReadPos >= copy_data_len) {
+                //no wrap round
+                memcpy(data, m_arrayData + read_id->nReadPos, copy_data_len);
+                read_id->nReadPos += copy_data_len;
+            } else {
+                memcpy(data, m_arrayData + read_id->nReadPos, m_nDataSize - read_id->nReadPos);
+                //wrap around
+                memcpy(data + (m_nDataSize - read_id->nReadPos), m_arrayData, copy_data_len - (m_nDataSize - read_id->nReadPos));
+                read_id->nReadPos = copy_data_len - (m_nDataSize - read_id->nReadPos);
+            }
         }
     }
     if (read_id->nReadPos == m_nDataSize)

@@ -313,8 +313,8 @@ int CSLSRole::handler_read_data(int64_t *last_read_time)
 	}
 
 	if (n != TS_UDP_LEN) {
-        sls_log(SLS_LOG_ERROR, "[%p]CSLSRole::handler_read_data, libsrt_read n=%d, expect %d.", this, n, TS_UDP_LEN);
-        return SLS_ERROR;
+        sls_log(SLS_LOG_TRACE, "[%p]CSLSRole::handler_read_data, libsrt_read n=%d, expect %d.", this, n, TS_UDP_LEN);
+        //return SLS_ERROR;
     }
 
     if (NULL == m_map_data) {
@@ -348,8 +348,8 @@ int CSLSRole::handler_write_data()
         return SLS_ERROR ;
     }
 
-    if (0 == m_data_len) {
-        ret = m_map_data->get(m_map_data_key, m_data, DATA_BUFF_SIZE, &m_map_data_id);
+    if (m_data_len < TS_UDP_LEN) {
+        ret = m_map_data->get(m_map_data_key, m_data, DATA_BUFF_SIZE, &m_map_data_id, TS_UDP_LEN);
         if (ret < 0) {
         	//maybe no publisher, wait for timeout.
             return SLS_OK;
@@ -369,7 +369,8 @@ int CSLSRole::handler_write_data()
 	}
 
     int len = m_data_len - m_data_pos;
-    while (m_data_pos < m_data_len) {
+    int remainer = m_data_len - m_data_pos;
+    while (remainer >= TS_UDP_LEN) {
         ret = write(m_data + m_data_pos, TS_UDP_LEN);
         if (ret < TS_UDP_LEN) {
             sls_log(SLS_LOG_INFO, "[%p]CSLSRole::handler_write_data, write data failed, ret=%d, not %d.", this, len, ret, TS_UDP_LEN);
@@ -377,6 +378,7 @@ int CSLSRole::handler_write_data()
         }
         m_data_pos += TS_UDP_LEN;
         write_size += TS_UDP_LEN;
+        remainer = m_data_len - m_data_pos;
     }
 
     if (m_data_pos < m_data_len) {

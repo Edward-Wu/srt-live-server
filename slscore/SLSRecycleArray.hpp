@@ -51,7 +51,7 @@ public :
 
 public :
     int  put(char *data, int len);
-    int  get(char *dst, int size, SLSRecycleArrayID *read_id);
+    int  get(char *dst, int size, SLSRecycleArrayID *read_id, int aligned=0);
 
     void setSize(int n);
     int  count();

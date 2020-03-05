@@ -47,6 +47,7 @@
 
 #include "common.hpp"
 
+
 /**
 * sls_format
  */
@@ -315,6 +316,19 @@ static int sls_mkdir_p(const char *path)
     return ret;
 }
 
+void sls_remove_marks(char * s) {
+    int len = strlen(s);
+    if (len < 2)//pair
+        return;
+
+    if ((s[0] == '\'' && s[len-1] == '\'')
+     || (s[0] == '"' && s[len-1] == '"')) {
+        for(int i=0; i < len-2; i ++) {
+            s[i] = s[i+1];
+        }
+        s[len-2] = 0x0;
+    }
+}
 
 static char pid_path_name[] = "~/sls";
 static char pid_file_name[] = "~/sls/pid.txt";
@@ -440,3 +454,375 @@ std::string sls_find_string(std::vector<std::string> &src, std::string &dst)
     }
     return ret;
 }
+
+/**
+ * parse ts
+ */
+enum {
+    H264_NAL_UNSPECIFIED     = 0,
+    H264_NAL_SLICE           = 1,
+    H264_NAL_DPA             = 2,
+    H264_NAL_DPB             = 3,
+    H264_NAL_DPC             = 4,
+    H264_NAL_IDR_SLICE       = 5,
+    H264_NAL_SEI             = 6,
+    H264_NAL_SPS             = 7,
+    H264_NAL_PPS             = 8,
+    H264_NAL_AUD             = 9,
+};
+
+static int64_t ff_parse_pes_pts(const uint8_t  *buf)
+{
+
+    int64_t pts = 0;
+    int64_t tmp = (int64_t)((buf[0] & 0x0e) << 29) ;
+    pts = pts | tmp;
+    tmp = (int64_t)((((int64_t)(buf[1]&0xFF)<<8)|(buf[2]) >> 1) << 15);
+    pts = pts | tmp;
+    tmp = (int64_t)((((int64_t)(buf[3]&0xFF)<<8)|(buf[4])) >> 1);
+    pts = pts | tmp;
+    return pts;
+}
+
+static int sls_parse_spspps(const uint8_t *es, int es_len, ts_info *ti)
+{
+    int ret = SLS_ERROR;
+    int pos = 0;
+    uint8_t *p = NULL;
+    uint8_t *p_end = NULL;
+    uint8_t nal_type = 0;
+    while (pos < es_len-4) {
+        //avc nal
+        bool b_nal = false;
+        if (0x0 == es[pos] &&
+            0x0 == es[pos+1] &&
+            0x0 == es[pos+2] &&
+           (0x1 == es[pos+3] || (0x0 == es[pos+3] && 0x1 == es[pos+4]))) {
+            if (p != NULL) {
+                p_end= (uint8_t *)es + pos;
+                if (H264_NAL_SPS == nal_type) {
+                    ti->sps_len = p_end-p;
+                    memcpy(ti->sps, p, ti->sps_len);
+                } else if (H264_NAL_PPS == nal_type) {
+                    ti->pps_len = p_end-p;
+                    memcpy(ti->pps, p, ti->pps_len);
+                } else {
+                   printf("parse_spspps, wrong nal type=%d.\n", nal_type);
+                }
+
+                if (ti->sps_len > 0 && ti->pps_len > 0) {
+                    p = NULL;
+                    ret = SLS_OK;
+                    break;
+                }
+            }
+            int nal_pos = pos + (es[pos+3]?4:5);
+            nal_type = es[nal_pos]&0x1f;
+            if (H264_NAL_SPS == nal_type || H264_NAL_PPS == nal_type) {
+                p = (uint8_t *)es + pos;
+            }
+            pos = nal_pos;
+        }else{
+            pos ++;
+        }
+    }
+
+    //last nal
+    if (p != NULL) {
+
+        p_end= (uint8_t *)es + es_len;
+        if (H264_NAL_SPS == nal_type) {
+            ti->sps_len = p_end-p;
+            memcpy(ti->sps, p, ti->sps_len);
+        } else if (H264_NAL_PPS == nal_type) {
+            ti->pps_len = p_end-p;
+            memcpy(ti->pps, p, ti->pps_len);
+        } else {
+           printf("parse_spspps, wrong nal type=%d.\n", nal_type);
+        }
+        if (ti->sps_len > 0 && ti->pps_len > 0) {
+            ret = SLS_OK;
+        }
+    }
+    return ret;
+}
+
+
+static int sls_pes2es(const uint8_t *pes_frame, int pes_len, ts_info *ti, int pid)
+{
+    if (!pes_frame) {
+        printf("pes2es: pes_frame is null.\n");
+        return SLS_ERROR;
+    }
+    uint8_t *pes     = (uint8_t *)pes_frame;
+    uint8_t *pes_end = (uint8_t *)pes_frame + pes_len;
+
+    if (pes[0] != 0x00 ||
+            pes[1] != 0x00 ||
+            pes[2] != 0x01) {
+        //printf("pes2es: pid=%d, wrong pes header, pes=0x%x-0x%x-0x%x.\n",
+        //        ti->es_pid, pes[0], pes[1], pes[2]);
+        return SLS_ERROR;
+    }
+    pes += 3;
+
+    /* it must be an MPEG-2 PES stream */
+    int stream_id = (pes[0] & 0xFF);
+    if (stream_id != 0xE0 && stream_id != 0xC0) {
+        printf("pes2es: pid=%d, wrong pes stream_id=0x%x.", pid, stream_id);
+        return SLS_ERROR;
+    }
+    pes ++;
+
+    int total_size = ((int)(pes[0]<<8)) | pes[1];
+    pes += 2;
+    /* NOTE: a zero total size means the PES size is
+     * unbounded */
+    if (0 == total_size)
+        total_size = MAX_PES_PAYLOAD;
+    int flags = 0;
+    /*
+    '10'                        :2,
+    PES_scrambling_control      :2,
+    PES_priority                :1,
+    data_alignment_indicator    :1,
+    copyright                   :1,
+    original_or_copy            :1
+     */
+    flags = (pes[0] & 0x7F);
+    pes ++;
+
+    /*
+    PTS_DTS_flags               :2,
+    ESCR_flag                   :1,
+    ES_rate_flag:1,
+    DSM_trick_mode_flag:1,
+    additional_copy_info_flag:1,
+    PES_CRC_flag:1,
+    PES_extension_flag:1,
+     */
+    flags = (pes[0] & 0xFF);
+    pes ++;
+
+    int header_len = (pes[0] & 0xFF);
+    pes ++;
+    ti->dts = INVALID_DTS_PTS;
+    ti->pts = INVALID_DTS_PTS;
+    if ((flags & 0xc0) == 0x80) {
+        ti->dts = ti->pts = ff_parse_pes_pts(pes);
+        pes += 5;
+    } else if ((flags & 0xc0) == 0xc0) {
+        ti->pts = ff_parse_pes_pts(pes);
+        pes += 5;
+        ti->dts = ff_parse_pes_pts(pes);
+        pes += 5;
+    }
+
+    int ret = SLS_OK;
+    //parse sps and pps
+    if (ti->need_spspps){
+        ret = sls_parse_spspps(pes, pes_end - pes, ti);
+        if (ti->sps_len > 0 && ti->pps_len > 0 && ti->pat_len > 0 && ti->pat_len > 0) {
+            uint8_t * p = ti->ts_data ;
+            int pos = 0;
+            uint8_t tmp;
+
+            //pat, pmt
+            memcpy(p+pos, ti->pat, TS_PACK_LEN);
+            pos += TS_PACK_LEN;
+            memcpy(p+pos, ti->pmt, TS_PACK_LEN);
+            pos += TS_PACK_LEN;
+
+            //sps pps
+            int len = ti->sps_len + ti->pps_len;
+            len = len + 9 + 5;//pes len
+            if (len > TS_PACK_LEN-4) {
+                printf("pid=%d, pes size=%d is abnormal!!!!\n", pid, len);
+                return ret;
+            }
+            pos ++;
+            //pid
+            ti->es_pid = pid;
+            tmp = ti->es_pid >> 8;
+            p[pos++] = 0x40 | tmp;
+            tmp = ti->es_pid;
+            p[pos++] = tmp;
+            p[pos] = 0x10;
+            int ad_len = TS_PACK_LEN - 4 - len - 1;
+            if (ad_len > 0) {
+                p[pos++] = 0x30;
+                p[pos++] = ad_len;//adaptation length
+                p[pos++] = 0x00;//
+                memset(p + pos, 0xFF, ad_len-1);
+                pos += ad_len - 1;
+            }else{
+                pos ++;
+            }
+
+            //pes
+            p[pos++] = 0;
+            p[pos++] = 0;
+            p[pos++] = 1;
+            p[pos++] = stream_id;
+            p[pos++] = 0;//total size
+            p[pos++] = 0;//total size
+            p[pos++] = 0x80;//flag
+            p[pos++] = 0x80;//flag
+            p[pos++] = 5;//header_len
+            p[pos++] = 0;//pts
+            p[pos++] = 0;
+            p[pos++] = 0;
+            p[pos++] = 0;
+            p[pos++] = 0;
+            memcpy(p+pos, ti->sps, ti->sps_len);
+            pos += ti->sps_len;
+            memcpy(p+pos, ti->pps, ti->pps_len);
+            pos += ti->pps_len;
+        }
+    }
+    return ret;
+}
+
+static int sls_parse_pat(const uint8_t *pat_data, int len, ts_info *ti)
+{
+    uint8_t *buffer = (uint8_t *)pat_data;
+    int table_id                    = buffer[0];
+    int section_syntax_indicator    = buffer[1] >> 7;
+    int zero                        = buffer[1] >> 6 & 0x1;
+    int reserved_1                  = buffer[1] >> 4 & 0x3;
+    int section_length              = (buffer[1] & 0x0F) << 8 | buffer[2];
+    int transport_stream_id         = buffer[3] << 8 | buffer[4];
+    int reserved_2                  = buffer[5] >> 6;
+    int version_number              = buffer[5] >> 1 &  0x1F;
+    int current_next_indicator      = (buffer[5] << 7) >> 7;
+    int section_number              = buffer[6];
+    int last_section_number         = buffer[7];
+
+    int CRC_32                      = (buffer[len-4] & 0x000000FF) << 24
+       | (buffer[len-3] & 0x000000FF) << 16
+       | (buffer[len-2] & 0x000000FF) << 8
+       | (buffer[len-1] & 0x000000FF);
+
+    int n = 0;
+    for ( n = 0; n < section_length - 12; n += 4 )
+    {
+        unsigned  program_num = buffer[8 + n ] << 8 | buffer[9 + n ];
+        int reserved_3           = buffer[10 + n ] >> 5;
+        int network_PID = 0x00;
+        if ( program_num == 0x00)
+        {
+             network_PID = (buffer[10 + n ] & 0x1F) << 8 | buffer[11 + n ];
+        }else{
+            ti->pmt_pid = (buffer[10 + n] & 0x1F) << 8 | buffer[11 + n];
+        }
+     }
+    return SLS_OK;
+
+}
+
+int sls_parse_ts_info(const uint8_t *packet, ts_info *ti){
+
+
+    if (packet[0] != TS_SYNC_BYTE) {
+        printf( "ts2es: packet[0]=0x%x not 0x47.\n", packet[0]);
+        return SLS_ERROR;
+    }
+
+    int is_start = packet[1] & 0x40;
+    if (0 == is_start) {
+        // no start indicatore
+        return SLS_ERROR;
+    }
+
+    int pid = (int)((packet[1] & 0x1F) << 8) | (packet[2]&0xFF);
+    if (PAT_PID == pid) {
+        //save pat table
+        memcpy(ti->pat, packet, TS_PACK_LEN);
+        ti->pat_len = TS_PACK_LEN;
+    }else {
+        if (ti->pmt_pid == pid) {
+            memcpy(ti->pmt, packet, TS_PACK_LEN);
+            ti->pmt_len = TS_PACK_LEN;
+            return SLS_OK;
+        }
+        if (INVALID_PID != ti->es_pid) {
+            if (pid != ti->es_pid) {
+                //not available pid
+                return SLS_ERROR;
+            }
+        }
+    }
+
+    //start to parse the dts
+    int afc = (packet[3] >> 4) & 3;
+    if (afc == 0) /* reserved value */
+        return SLS_ERROR;
+    int has_adaptation   = afc & 2;
+    int has_payload      = afc & 1;
+    bool is_discontinuity = (has_adaptation == 1) &&
+            (packet[4] != 0) && /* with length > 0 */
+            ((packet[5] & 0x80) != 0); /* and discontinuity indicated */
+
+
+    if ((packet[1] & 0x80) != 0) {
+        //Log.i(TAG, "SrsTSToES, Packet had TEI flag set; marking as corrupt ");
+    }
+
+    int pos = 4;
+    int p = (packet[pos] & 0xFF);
+    if (has_adaptation != 0) {
+        int64_t pcr_h;
+        int pcr_l;
+        //if (parse_pcr(&pcr_h, &pcr_l, packet) == 0)
+        //ts->last_pcr = pcr_h * 300 + pcr_l;
+        /* skip adaptation field */
+        pos += p + 1;
+        //printf("ts2es: adaptation, pos=%d.", pos);
+    }
+    /* if past the end of packet, ignore */
+    if (pos >= TS_PACK_LEN || 1 != has_payload) {
+        printf("ts2es: pid=%d, payload len=%d, >188.\n", pid, pos);
+        return SLS_ERROR;
+    }
+
+    if (pid == PAT_PID) {
+        if (is_start)
+            pos ++;
+        return sls_parse_pat(packet+pos, TS_PACK_LEN - pos, ti);
+    }
+
+    int ret = sls_pes2es(packet+pos, TS_PACK_LEN - pos, ti, pid);
+    if (ti->dts != INVALID_DTS_PTS) {
+        ti->es_pid = pid;
+    }
+    if (ti->sps_len > 0 && ti->pps_len > 0) {
+        ti->es_pid = pid;
+    }
+    return ret;
+}
+
+void sls_init_ts_info(ts_info *ti)
+{
+    if (NULL != ti) {
+        ti->es_pid  = INVALID_PID;
+        ti->dts     = INVALID_DTS_PTS;
+        ti->pts     = INVALID_DTS_PTS;
+        ti->sps_len = 0;
+        ti->pps_len = 0;
+        ti->pat_len = 0;
+        ti->pmt_len = 0;
+        ti->pmt_pid = INVALID_PID;
+        ti->need_spspps    = false;
+
+        memset(ti->ts_data, 0, TS_UDP_LEN);
+
+        for (int i = 0; i < TS_UDP_LEN; ) {
+            ti->ts_data[i] = 0x47;
+            ti->ts_data[i+1] = 0x1F;
+            ti->ts_data[i+2] = 0xFF;
+            ti->ts_data[i+3] = 0x00;
+            i+=TS_PACK_LEN;
+        }
+    }
+}
+

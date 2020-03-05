@@ -88,20 +88,26 @@ int main(int argc, char* argv[])
     memset(&sls_opt, 0, sizeof(sls_opt));
     int i = 1;
 	while (i < argc) {
+	    sls_remove_marks(argv[i]);
 		if (strcmp("-r", argv[i]) == 0) {
 			i ++;
+	        sls_remove_marks(argv[i]);
 			strcpy(sls_opt.srt_url, argv[i++]);
 		} else if  (strcmp("-i", argv[i]) == 0) {
 			i ++;
+	        sls_remove_marks(argv[i]);
 			strcpy(sls_opt.ts_file_name, argv[i++]);
 		} else if  (strcmp("-o", argv[i]) == 0) {
 			i ++;
+	        sls_remove_marks(argv[i]);
 			strcpy(sls_opt.out_file_name, argv[i++]);
 		} else if  (strcmp("-c", argv[i]) == 0) {
 			i ++;
+	        sls_remove_marks(argv[i]);
 			sls_opt.worker_count = atoi(argv[i++]);
 		} else if  (strcmp("-l", argv[i]) == 0) {
 			i ++;
+	        sls_remove_marks(argv[i]);
 			sls_opt.loop = atoi(argv[i++]);
 		} else {
 	        sls_log(SLS_LOG_INFO, "srt live client, wrong parameter '%s', EXIT!", argv[i]);

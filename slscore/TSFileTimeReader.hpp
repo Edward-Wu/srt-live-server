@@ -59,11 +59,6 @@ private:
     int64_t         m_udp_duration;
     int64_t         m_readed_count;
 
-    int      check_sync();
-    int      ts2es(const uint8_t *packet);
-    int      pes2es(int pid, const uint8_t *pesFrame, int64_t &dts, int64_t& pts);
-    int64_t  ff_parse_pes_pts(const uint8_t  *buf);
-
 };
 
 

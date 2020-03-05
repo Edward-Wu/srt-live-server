@@ -38,11 +38,6 @@
 #include "TSFileTimeReader.hpp"
 #include "SLSLog.hpp"
 
-#define TS_SYNC_BYTE 0x47
-#define TS_PACK_LEN 188
-#define INVALID_PID -1
-#define INVALID_DTS_PTS -1
-#define MAX_PES_PAYLOAD 200 * 1024
 #define RTS_PACK_LEN (1316 + sizeof(int64_t))
 #define RTS_BUF_SIZE (RTS_PACK_LEN * 100)
 
@@ -210,12 +205,68 @@ int64_t CTSFileTimeReader::generate_rts_file(const char  *ts_file_name)
 
     m_array_data.setSize(TS_UDP_LEN * 1000);
     uint8_t ts_pack[TS_PACK_LEN] = {0};
+    int ts_index = 0;
+    int dts_index = 0;
+    ts_info ti;
+    sls_init_ts_info(&ti);
     while(true) {
     	int n = read(ts_fd, ts_pack, TS_PACK_LEN);
     	if (n < TS_PACK_LEN)
     		break;
-    	ts2es(ts_pack);
-    	m_array_data.put(ts_pack, TS_PACK_LEN);
+    	sls_parse_ts_info((const uint8_t *)ts_pack, &ti);
+        if (INVALID_DTS_PTS == ti.dts ) {
+            m_array_data.put(ts_pack, TS_PACK_LEN);
+            ts_index ++;
+            continue;
+        }
+        if (INVALID_DTS_PTS == m_dts) {
+            //the 1st dts
+            sls_log(SLS_LOG_INFO, "[%p]CTSFileTimeReader::generate_rts_file, ts_index=%d, dts_index=%d, ti.es_pid=%d, dts=%lld.",
+                    this, ts_index, dts_index, ti.es_pid, ti.dts);
+            m_dts = ti.dts;
+            m_pts = ti.pts;
+            ti.dts = INVALID_DTS_PTS;
+            ti.pts = INVALID_DTS_PTS;
+            m_dts_pid = ti.es_pid;
+
+            m_array_data.put(ts_pack, TS_PACK_LEN);
+            ts_index ++;
+            dts_index ++;
+            continue;
+        }
+        //write the rts packet
+        int ts_count = m_array_data.count();
+        int ts_udp_count = ts_count/TS_UDP_LEN;
+        if (ts_udp_count > 0) {
+            m_udp_duration = (ti.dts - m_dts)/ts_udp_count;
+            int64_t rts = m_dts;
+            uint8_t rts_data[TS_UDP_LEN];
+            uint8_t p[8] = {0};
+            for (int i = 0; i < ts_udp_count; i++) {
+                int n = m_array_data.get(rts_data, TS_UDP_LEN);
+                if (n != TS_UDP_LEN) {
+                    printf("ts2es: m_array_data.get, wrong n=%d, not %d.\n", n, TS_UDP_LEN);
+                    break;
+                }
+                write(m_rts_fd, &rts, sizeof(rts));
+                write(m_rts_fd, rts_data, TS_UDP_LEN);
+                rts += m_udp_duration;
+            }
+            m_dts = ti.dts;
+            m_pts = ti.pts;
+        }
+        sls_log(SLS_LOG_INFO, "[%p]CTSFileTimeReader::generate_rts_file, ts_index=%d, dts_index=%d, m_dts_pid=%d, dts=%lld.",
+                this, ts_index, dts_index, m_dts_pid, ti.dts);
+        if (ti.sps_len > 0) {
+            sls_log(SLS_LOG_INFO, "[%p]CTSFileTimeReader::generate_rts_file, ts_index=%d, dts_index=%d, m_dts_pid=%d, sps_len=%d, pps_len=%d.",
+                    this, ts_index, dts_index, m_dts_pid, ti.sps_len, ti.pps_len);
+        }
+        ti.dts = INVALID_DTS_PTS;
+        ti.pts = INVALID_DTS_PTS;
+
+        m_array_data.put(ts_pack, TS_PACK_LEN);
+        ts_index ++;
+        dts_index ++;
     }
     //last data in m_array_data
 	int64_t rts = m_dts;
@@ -255,198 +306,5 @@ int64_t CTSFileTimeReader::generate_rts_file(const char  *ts_file_name)
     return SLS_OK;
 }
 
-int64_t CTSFileTimeReader::ff_parse_pes_pts(const uint8_t  *buf)
-{
-
-    int64_t pts = 0;
-    int64_t tmp = (int64_t)((buf[0] & 0x0e) << 29) ;
-    pts = pts | tmp;
-    tmp = (int64_t)((((int64_t)(buf[1]&0xFF)<<8)|(buf[2]) >> 1) << 15);
-    pts = pts | tmp;
-    tmp = (int64_t)((((int64_t)(buf[3]&0xFF)<<8)|(buf[4])) >> 1);
-    pts = pts | tmp;
-    return pts;
-}
-
-int CTSFileTimeReader::pes2es(int pid, const uint8_t *pesFrame, int64_t &dts, int64_t& pts)
-{
-    if (!pesFrame) {
-        printf("pes2es: pesFrame is null.\n");
-        return 0;
-    }
-    uint8_t *pes = (uint8_t *)pesFrame;
-
-    if (pes[0] != 0x00 ||
-            pes[1] != 0x00 ||
-            pes[2] != 0x01) {
-        printf("pes2es: pid=%d, wrong pes header, pes=0x%x-0x%x-0x%x.\n",
-        		pid, pes[0], pes[1], pes[2]);
-        return 0;
-    }
-    pes += 3;
-
-    /* it must be an MPEG-2 PES stream */
-    int stream_id = (pes[0] & 0xFF);
-    if (stream_id != 0xE0 && stream_id != 0xC0) {
-        printf("pes2es: pid=%d, wrong pes stream_id=0x%x.", pid, stream_id);
-        return 0;
-    }
-    pes ++;
-
-    int total_size = ((int)(pes[0]<<8)) | pes[1];
-    pes += 2;
-    /* NOTE: a zero total size means the PES size is
-     * unbounded */
-    if (0 == total_size)
-        total_size = MAX_PES_PAYLOAD;
-    int flags = 0;
-    /*
-    '10'                        :2,
-    PES_scrambling_control      :2,
-    PES_priority                :1,
-    data_alignment_indicator    :1,
-    copyright                   :1,
-    original_or_copy            :1
-     */
-    flags = (pes[0] & 0x7F);
-    pes ++;
-
-    /*
-    PTS_DTS_flags               :2,
-    ESCR_flag                   :1,
-    ES_rate_flag:1,
-    DSM_trick_mode_flag:1,
-    additional_copy_info_flag:1,
-    PES_CRC_flag:1,
-    PES_extension_flag:1,
-     */
-    flags = (pes[0] & 0xFF);
-    pes ++;
-
-    int header_len = (pes[0] & 0xFF);
-    pes ++;
-    dts = INVALID_DTS_PTS;
-    pts = INVALID_DTS_PTS;
-    if ((flags & 0xc0) == 0x80) {
-        dts = pts = ff_parse_pes_pts(pes);
-        pes += 5;
-    } else if ((flags & 0xc0) == 0xc0) {
-        pts = ff_parse_pes_pts(pes);
-        pes += 5;
-        dts = ff_parse_pes_pts(pes);
-        pes += 5;
-    }
-
-    return 0;
-}
-
-int CTSFileTimeReader::ts2es(const uint8_t *packet){
-
-
-    if (packet[0] != TS_SYNC_BYTE) {
-        printf( "ts2es: packet[0]=0x%x not 0x47.\n", packet[0]);
-        return 0;
-    }
-
-    int is_start = packet[1] & 0x40;
-    if (0 == is_start) {
-        // no start indicatore
-        return 0;
-    }
-
-    int pid = (int)((packet[1] & 0x1F) << 8) | (packet[2]&0xFF);
-    if (INVALID_PID != m_dts_pid) {
-        if (pid != m_dts_pid) {
-            //not available pid
-            //printf("ts2es: not available, pid=%d.\n", pid);
-            return 0;
-        }
-    }
-
-    //printf("found start_indicator, pid=%d, packet[1]=%x.\n", pid, packet[1]);
-    //start to parse the dts
-    int afc = (packet[3] >> 4) & 3;
-    if (afc == 0) /* reserved value */
-        return 0;
-    int has_adaptation   = afc & 2;
-    int has_payload      = afc & 1;
-    bool is_discontinuity = (has_adaptation == 1) &&
-            (packet[4] != 0) && /* with length > 0 */
-            ((packet[5] & 0x80) != 0); /* and discontinuity indicated */
-
-    /* continuity check (currently not used) */
-    /*
-    int cc = (packet[3] & 0xf);
-    int expected_cc = (has_payload == 1) ? (pesFrame.last_cc + 1) & 0x0f : pesFrame.last_cc;
-    boolean cc_ok = (pid == 0x1FFF) || // null packet PID
-            is_discontinuity ||
-            (pesFrame.last_cc < 0) ||
-            (expected_cc == cc);
-
-    pesFrame.last_cc = cc;
-    if (!cc_ok) {
-        Log.i(TAG, "SrsTSToES, Continuity check failed for pid " + pid +
-                " expected " + expected_cc + "but " + cc );
-    }
-    */
-
-    if ((packet[1] & 0x80) != 0) {
-        //Log.i(TAG, "SrsTSToES, Packet had TEI flag set; marking as corrupt ");
-    }
-
-    int pos = 4;
-    int p = (packet[pos] & 0xFF);
-    if (has_adaptation != 0) {
-        int64_t pcr_h;
-        int pcr_l;
-        //if (parse_pcr(&pcr_h, &pcr_l, packet) == 0)
-        //ts->last_pcr = pcr_h * 300 + pcr_l;
-        /* skip adaptation field */
-        pos += p + 1;
-        //printf("ts2es: adaptation, pos=%d.", pos);
-    }
-    /* if past the end of packet, ignore */
-    if (pos >= TS_PACK_LEN || 1 != has_payload) {
-        printf("ts2es: pid=%d, payload len=%d, >188.\n", pid, pos);
-        return 0;
-    }
-
-    int64_t dts = INVALID_DTS_PTS;
-    int64_t pts = INVALID_DTS_PTS;
-    int ret = pes2es(pid, packet+pos, dts, pts);
-    if (dts != INVALID_DTS_PTS ) {
-        if (m_dts_pid == INVALID_PID) {
-        	m_dts_pid = pid;
-            printf("ts2es: m_dts_pid=%d.\n", m_dts_pid);
-        }
-        if (INVALID_DTS_PTS == m_dts) {
-        	m_dts = dts;
-        	m_pts = pts;
-        } else {
-        	//write the rts packet
-        	int ts_count = m_array_data.count();
-        	int ts_udp_count = ts_count/TS_UDP_LEN;
-        	if (ts_udp_count > 0) {
-        	    m_udp_duration = (dts - m_dts)/ts_udp_count;
-    			int64_t rts = m_dts;
-        		uint8_t rts_data[TS_UDP_LEN];
-    			uint8_t p[8] = {0};
-        		for (int i = 0; i < ts_udp_count; i++) {
-        			int n = m_array_data.get(rts_data, TS_UDP_LEN);
-        			if (n != TS_UDP_LEN) {
-        		        printf("ts2es: m_array_data.get, wrong n=%d, not %d.\n", n, TS_UDP_LEN);
-        				break;
-        			}
-        			write(m_rts_fd, &rts, sizeof(rts));
-        			write(m_rts_fd, rts_data, TS_UDP_LEN);
-        			rts += m_udp_duration;
-        		}
-        		m_dts = dts;
-        		m_pts = pts;
-        	}
-        }
-    }
-    return 0;
-}
 
 

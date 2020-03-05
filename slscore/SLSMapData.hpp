@@ -43,15 +43,16 @@ public:
     void clear();
 
     int put(char *key, char *data, int len, int64_t *last_read_time=NULL);
-    int get(char *key, char *data, int len, SLSRecycleArrayID *read_id);
+    int get(char *key, char *data, int len, SLSRecycleArrayID *read_id, int aligned=0);
 
     bool is_exist(char *key);
 
 private:
     std::map<std::string, CSLSRecycleArray *>    m_map_array;        //uplive_key_stream:data'
+    std::map<std::string, ts_info *>             m_map_ts_info;      //uplive_key_stream:ts_info'
     CSLSRWLock          m_rwclock;
 
-
+    int check_ts_info(char *data, int len, ts_info *ti);
 };
 
 

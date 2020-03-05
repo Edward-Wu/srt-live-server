@@ -386,20 +386,6 @@ sls_conf_base_t * sls_conf_get_root_conf()
 }
 
 
-static void sls_remove_marks(char * s) {
-    int len = strlen(s);
-    if (len < 2)//pair
-        return;
-
-    if ((s[0] == '\'' && s[len-1] == '\'')
-     || (s[0] == '"' && s[len-1] == '"')) {
-        for(int i=0; i < len-2; i ++) {
-            s[i] = s[i+1];
-        }
-        s[len-2] = 0x0;
-    }
-}
-
 int sls_parse_argv(int argc, char * argv[], sls_opt_t * sls_opt, sls_conf_cmd_t *conf_cmd_opt, int cmd_size)
 {
     char opt_name[256] = {0};
