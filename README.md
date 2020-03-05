@@ -35,6 +35,7 @@ Test
 SLS only supports the MPEG-TS format streaming. 
 
 1.test with ffmpeg
+
 you can push camera live stream by FFMPEG.Please download ffmpeg sourcecode from https://github.com/FFmpeg/FFmpeg, then compile FFMPEG with --enable-libsrt. 
 
 srt library is installed in folder /usr/local/lib64.
