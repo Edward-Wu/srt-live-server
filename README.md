@@ -75,11 +75,17 @@ whith custom service.
 ---------------------------
 
 there is a test tool in sls, which can be used performance test because of no codec overhead but main network overhead. the slc can play a srt stream to a ts file, or push a ts file to a srt stream.
+
 push ts file as srt url:
+
 cd bin
+
 ./slc -r srt://[your.sls.ip]:8080?streamid=uplive.sls.com/live/test -i [the full file name of exist ts file]
+
 play srt url
+
 ./slc -r srt://[your.sls.ip]:8080?streamid=uplive.sls.com/live/test -o [the full file name of ts file to save]
+
 
 Note:
 =====
