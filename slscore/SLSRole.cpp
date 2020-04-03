@@ -25,7 +25,7 @@
 
 #include <errno.h>
 #include <string.h>
-
+#include <sys/stat.h>
 
 #include "SLSRole.hpp"
 #include "SLSLog.hpp"
@@ -68,6 +68,16 @@ CSLSRole::CSLSRole()
     m_need_reconnect  = false;
     m_http_client     = NULL;
 
+    sprintf(m_record_hls, "off");//default off
+    m_record_hls_ts_fd   = 0;
+    memset(m_record_hls_ts_filename, 0, URL_MAX_LEN);
+    m_record_hls_vod_fd   = 0;
+    memset(m_record_hls_vod_filename, 0, URL_MAX_LEN);
+    sprintf(m_record_hls_path, "./vod");//default current path
+    m_record_hls_begin_tm_ms = 0;
+    m_record_hls_segment_duration   = 10;//default 10s
+    m_record_hls_target_duration    = m_record_hls_segment_duration;
+
 	sprintf(m_role_name, "role");
 }
 
@@ -104,6 +114,8 @@ int CSLSRole::uninit()
 	    remove_from_epoll();
 	    invalid_srt();
 	}
+	close_hls_file();
+
 	return ret;
 }
 
@@ -274,6 +286,14 @@ bool CSLSRole::check_idle_streams_duration(int64_t cur_time_ms)
 	return false;
 }
 
+void CSLSRole::set_record_hls_path(const char *hls_path)
+{
+    if (hls_path && strlen(hls_path) > 0) {
+        strcpy(m_record_hls_path, hls_path);
+    }
+}
+
+
 int CSLSRole::check_http_client()
 {
 	if (NULL == m_http_client) {
@@ -282,6 +302,141 @@ int CSLSRole::check_http_client()
 	return SLS_OK;
 }
 
+void CSLSRole::close_hls_file()
+{
+
+    if (m_record_hls_ts_fd) {
+         sls_log(SLS_LOG_INFO, "[%p]CSLSRole::close_hls_file, close ts file='%s', fd=%d.", this, m_record_hls_ts_filename, m_record_hls_ts_fd);
+         ::close(m_record_hls_ts_fd);
+         m_record_hls_ts_fd = 0;
+    }
+    if (0 != m_record_hls_vod_fd) {
+        ::close(m_record_hls_vod_fd);
+        int vod_fd = 0;
+        vod_fd = ::open(m_record_hls_vod_filename, O_RDONLY, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+        sls_log(SLS_LOG_INFO, "[%p]CSLSRole::close_hls_file, prepare open '%s', fd=%d.", this, m_record_hls_vod_filename, vod_fd);
+        sprintf(m_record_hls_vod_filename, "%s/vod.m3u8", m_record_hls_path);
+        struct stat stat_file;
+        if (0 == stat(m_record_hls_vod_filename, &stat_file)) {
+            m_record_hls_vod_fd = ::open(m_record_hls_vod_filename, O_WRONLY|O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+        } else {
+            m_record_hls_vod_fd = ::open(m_record_hls_vod_filename, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+        }
+        //write header
+        char m3u8_info[URL_MAX_LEN] = {0};
+        sprintf(m3u8_info, "#EXTM3U\n\
+#EXT-X-VERSION:3\n\
+#EXT-X-TARGETDURATION:%d\n", (int)(m_record_hls_target_duration+1));
+        ::write(m_record_hls_vod_fd, m3u8_info, strlen(m3u8_info));
+        const int buf_len = 4096;
+        char buf[buf_len] = {0};
+        while(true) {
+            int len = ::read(vod_fd, buf, buf_len);
+            sls_log(SLS_LOG_INFO, "[%p]CSLSRole::close_hls_file, read data len=%d, fd=%d.", this, len, vod_fd);
+            if (len == buf_len) {
+                ::write(m_record_hls_vod_fd, buf, len);
+            } else {
+                if (len > 0)
+                    ::write(m_record_hls_vod_fd, buf, len);
+                break;
+            }
+        }
+        ::close(vod_fd);
+
+        sprintf(m3u8_info, "#EXT-X-ENDLIST");
+        ::write(m_record_hls_vod_fd, m3u8_info, strlen(m3u8_info));
+        ::close(m_record_hls_vod_fd);
+        m_record_hls_vod_fd = 0;
+    }
+}
+
+void CSLSRole::check_hls_file()
+{
+    //check file duration
+    int64_t cur_tm_ms = sls_gettime_ms();
+    float d = cur_tm_ms - m_record_hls_begin_tm_ms;
+    d /=1000;
+    if (d < m_record_hls_segment_duration) {
+        return ;
+    }
+    m_record_hls_begin_tm_ms = cur_tm_ms;
+
+    //check path
+    if (sls_mkdir_p(m_record_hls_path) != -1) {
+        sls_log(SLS_LOG_INFO, "[%p]CSLSRole::check_hls_file, mkdir '%s' ok.\n", this, m_record_hls_path);
+    } else {
+        if (errno != EEXIST) {
+            sls_log(SLS_LOG_INFO, "[%p]CSLSRole::check_hls_file, mkdir '%s' failed.\n", this, m_record_hls_path);
+            return ;
+        }
+        sls_log(SLS_LOG_INFO, "[%p]CSLSRole::check_hls_file, '%s' exist.\n", this, m_record_hls_path);
+    }
+
+    //update ts file
+    if (m_record_hls_ts_fd) {
+         m_record_hls_target_duration = m_record_hls_target_duration<d?d:m_record_hls_target_duration;
+         sls_log(SLS_LOG_INFO, "[%p]CSLSRole::check_hls_file, close ts file='%s', fd=%d.", this, m_record_hls_ts_filename, m_record_hls_ts_fd);
+         ::close(m_record_hls_ts_fd);
+         m_record_hls_ts_fd = 0;
+
+         char ts_item[URL_MAX_LEN] = {0};
+         sprintf(ts_item, "#EXTINF:%0.3f,\n%s\n", d, m_record_hls_ts_filename);
+         //update vod file
+         if (0 == m_record_hls_vod_fd) {
+             sprintf(m_record_hls_vod_filename, "%s/vod-%lld.m3u8.extinfo", m_record_hls_path, cur_tm_ms/1000);
+             struct stat stat_file;
+             if (0 == stat(m_record_hls_vod_filename, &stat_file)) {
+                 m_record_hls_vod_fd = ::open(m_record_hls_vod_filename, O_WRONLY|O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+             } else {
+                 m_record_hls_vod_fd = ::open(m_record_hls_vod_filename, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+             }
+             sls_log(SLS_LOG_INFO, "[%p]CSLSRole::check_hls_file, create vod file='%s', fd=%d.", this, m_record_hls_vod_filename, m_record_hls_vod_fd);
+         }
+         if (0 != m_record_hls_vod_fd) {
+             ::write(m_record_hls_vod_fd, ts_item, strlen(ts_item));
+         }
+    }
+    char full_ts_name[URL_MAX_LEN] = {0};
+    sprintf(m_record_hls_ts_filename, "%lld.ts", cur_tm_ms/1000);
+    sprintf(full_ts_name, "%s/%s", m_record_hls_path, m_record_hls_ts_filename);
+    m_record_hls_ts_fd = ::open(full_ts_name, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+    sls_log(SLS_LOG_INFO, "[%p]CSLSRole::check_hls_file, create ts file='%s', fd=%d.", this, full_ts_name, m_record_hls_ts_fd);
+    if (m_record_hls_ts_fd) {
+        //write sps pps
+        if (m_map_data) {
+            char ts_info[TS_UDP_LEN] = {0};
+            int re = m_map_data->get_ts_info(m_map_data_key, ts_info, TS_UDP_LEN);
+            if (re > 0) {
+                ::write(m_record_hls_ts_fd, ts_info, re);
+            }
+        }
+    }
+}
+
+void CSLSRole::record_data2hls(char* data, int len)
+{
+    //check hls file
+    check_hls_file();
+
+    if (0 != m_record_hls_ts_fd) {
+        ::write(m_record_hls_ts_fd, data, len);
+    }
+    /*
+    //save data
+    static char out_file_name[URL_MAX_LEN] = {0};
+    if (strlen(out_file_name) == 0) {
+    char cur_tm[256];
+    sls_gettime_default_string(cur_tm);
+    sprintf(out_file_name, "./obs_%s.ts", cur_tm);
+    }
+    static int fd_out = open(out_file_name, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
+
+    if (0 != fd_out) {
+    write(fd_out, data, len);
+    }
+    */
+
+}
 
 int CSLSRole::handler_read_data(int64_t *last_read_time)
 {
@@ -324,7 +479,13 @@ int CSLSRole::handler_read_data(int64_t *last_read_time)
 
     sls_log(SLS_LOG_TRACE, "[%p]CSLSRole::handler_read_data, ok, libsrt_read n=%d.", this, n);
     int ret = m_map_data->put(m_map_data_key, szData, n, last_read_time);
-	return ret;
+
+    //record data
+    if (strcmp(m_record_hls, "on") == 0) {
+        record_data2hls(szData, n);
+    }
+
+    return ret;
 }
 
 int CSLSRole::handler_write_data()

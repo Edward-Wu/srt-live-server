@@ -96,6 +96,7 @@ CSLSListener::CSLSListener()
     m_idle_streams_timeout_role = 0;
     m_stat_info = std::string("");
     memset(m_http_url_role, 0, URL_MAX_LEN);
+    memset(m_record_hls_path_prefix, 0, URL_MAX_LEN);
 
     sprintf(m_role_name, "listener");
 }
@@ -135,6 +136,13 @@ void CSLSListener::set_map_puller(CSLSMapRelay *map_puller)
 void CSLSListener::set_map_pusher(CSLSMapRelay *map_pusher)
 {
     m_map_pusher     = map_pusher;
+}
+
+void CSLSListener::set_record_hls_path_prefix(char *path)
+{
+    if (path != NULL && strlen(path) > 0) {
+        strcpy(m_record_hls_path_prefix, path);
+    }
 }
 
 int CSLSListener::init_conf_app()
@@ -288,7 +296,7 @@ int CSLSListener::start()
     if (latency > 0) {
         ret = m_srt->libsrt_setsockopt(SRTO_LATENCY, "SRTO_LATENCY",  &latency, sizeof (latency));
         if (SLS_OK != ret) {
-            sls_log(SLS_LOG_INFO, "[%p]CSLSListener::start, libsrt_setsockopt failure.", this);
+            sls_log(SLS_LOG_INFO, "[%p]CSLSListener::start, libsrt_setsockopt latency=%d failure.", this, latency);
             return ret;
         }
     }
@@ -502,6 +510,10 @@ int CSLSListener::handler()
     std::string stat_info = std::string(tmp);
     pub->set_stat_info_base(stat_info);
     pub->set_http_url(m_http_url_role);
+    //set hls record path
+    sprintf(tmp, "%s/%d/%s",
+            m_record_hls_path_prefix, m_port, key_stream_name);
+    pub->set_record_hls_path(tmp);
 
 	sls_log(SLS_LOG_INFO, "[%p]CSLSListener::handler, new pub=%p, key_stream_name=%s.",
 			this, pub, key_stream_name);

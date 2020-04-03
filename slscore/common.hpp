@@ -76,6 +76,7 @@ using namespace std;
 
 #define TS_PACK_LEN 188
 #define TS_UDP_LEN 1316 //7*188
+#define SHORT_STR_MAX_LEN 256
 #define STR_MAX_LEN 1024
 #define URL_MAX_LEN STR_MAX_LEN
 #define STR_DATE_TIME_LEN 32
@@ -94,6 +95,7 @@ void    sls_remove_marks(char *s);
 
 uint32_t sls_hash_key(const char *data, int len);
 int      sls_gethostbyname(const char *hostname, char *ip);
+int      sls_mkdir_p(const char *path);
 
 int sls_read_pid();
 int sls_write_pid(int pid);

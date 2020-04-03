@@ -281,7 +281,7 @@ static int av_strncasecmp(const char *a, const char *b, size_t n)
     return c1 - c2;
 }
 
-static int sls_mkdir_p(const char *path)
+int sls_mkdir_p(const char *path)
 {
 
     int ret = 0;

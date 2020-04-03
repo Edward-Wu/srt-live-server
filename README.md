@@ -140,4 +140,6 @@ v1.4.4
 1. OBS streaming compatible, OBS support the srt protocol which is later than v25.0.
 (https://obsproject.com/forum/threads/obs-studio-25-0-release-candidate.116067/)
 
-
+v1.4.5
+------
+1. add hls record feature.

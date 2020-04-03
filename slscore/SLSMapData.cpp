@@ -138,21 +138,6 @@ int CSLSMapData::put(char *key, char *data, int len, int64_t *last_read_time)
                 this, key);
     }
 
-    /*//for test, in future, add the record feature.
-    //save data
-    static char out_file_name[URL_MAX_LEN] = {0};
-    if (strlen(out_file_name) == 0) {
-        char cur_tm[256];
-        sls_gettime_default_string(cur_tm);
-        sprintf(out_file_name, "./obs_%s.ts", cur_tm);
-    }
-    static int fd_out = open(out_file_name, O_WRONLY|O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH);
-
-    if (0 != fd_out) {
-        write(fd_out, data, len);
-    }
-    */
-
     ret = array_data->put(data, len);
     if (ret != len) {
         sls_log(SLS_LOG_ERROR, "[%p]CSLSMapData::put, key=%s, array_data->put failed, len=%d, but ret=%d.",
@@ -208,15 +193,25 @@ int CSLSMapData::get(char *key, char *data, int len, SLSRecycleArrayID *read_id,
     ret = array_data->get(data, len, read_id, aligned);
     if (b_first) {
         //get sps and pps
-        ts_info *ti = NULL;
-        std::map<std::string, ts_info *>::iterator item_ti;
-        item_ti = m_map_ts_info.find(strKey);
-        if (item_ti != m_map_ts_info.end()) {
-            ti = item_ti->second;
+        ret = get_ts_info(key, data, len);
+        sls_log(SLS_LOG_INFO, "[%p]CSLSMapData::get, get sps pps ok, key=%s, len=%d.",
+                    this, key, ret);
+    }
+    return ret;
+}
+
+int CSLSMapData::get_ts_info(char *key, char *data, int len)
+{
+    int ret = 0;
+    ts_info *ti = NULL;
+    std::string strKey = std::string(key);
+    std::map<std::string, ts_info *>::iterator item_ti;
+    item_ti = m_map_ts_info.find(strKey);
+    if (item_ti != m_map_ts_info.end()) {
+        ti = item_ti->second;
+        if (len >= TS_UDP_LEN) {
             memcpy(data, ti->ts_data, TS_UDP_LEN);
             ret = TS_UDP_LEN;
-            sls_log(SLS_LOG_INFO, "[%p]CSLSMapData::get, get sps pps ok, key=%s, len=%d.",
-                    this, key, ret);
         }
     }
     return ret;

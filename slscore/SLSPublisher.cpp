@@ -58,7 +58,10 @@ int CSLSPublisher::init()
 {
     int ret = CSLSRole::init();
     if (m_conf) {
+        sls_conf_app_t * app_conf = ((sls_conf_app_t *)m_conf);
         //m_exit_delay = ((sls_conf_app_t *)m_conf)->publisher_exit_delay;
+        strcpy(m_record_hls, app_conf->record_hls);
+        m_record_hls_segment_duration = app_conf->record_hls_segment_duration;
     }
 
     return ret;
