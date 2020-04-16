@@ -144,11 +144,12 @@ int sls_gethostbyname(const char *hostname, char *ip)
     struct hostent *hptr;
     char   str[32];
     ptr = (char *)hostname;
+    int ret = SLS_ERROR;
 
     if((hptr = gethostbyname(ptr)) == NULL)
      {
          printf("sls_gethostbyname: gethostbyname error for host:%s\n", ptr);
-         return 0;
+         return ret;
      }
 
 /*
@@ -168,13 +169,14 @@ int sls_gethostbyname(const char *hostname, char *ip)
 
         	 //copy the 1st ip
              strcpy(ip, inet_ntop(hptr->h_addrtype, hptr->h_addr, str, sizeof(str)));
+             ret = SLS_OK;
          break;
          default:
              printf("sls_gethostbyname: unknown address type\n");
          break;
      }
 
-     return 0;
+     return ret;
  }
 
 static void av_str_replace(char *buf, const char dst, const char ch)

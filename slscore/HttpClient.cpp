@@ -101,7 +101,13 @@ int  CHttpClient::open(const char *url, const char *method, int interval)
 		goto FUNC_END;
     }
 
-    ret = CTCPRole::open(m_remote_host, m_remote_port);
+    char resolved_ip[128];
+    if (SLS_OK != sls_gethostbyname(m_remote_host, resolved_ip)) {
+        sls_log(SLS_LOG_INFO, "[%p]CHttpClient::open, failed to resolve, remote_host='%s', remote_port=%d.",
+        		this, m_remote_host, m_remote_port);
+		goto FUNC_END;
+    }
+    ret = CTCPRole::open(resolved_ip, m_remote_port);
     if (SLS_OK != ret) {
         sls_log(SLS_LOG_INFO, "[%p]CHttpClient::open, failed, remote_host='%s', remote_port=%d.",
         		this, m_remote_host, m_remote_port);
@@ -425,7 +431,7 @@ int CHttpClient::handler()
     return SLS_OK;
 }
 
- 
+
 
 int CHttpClient::parse_url()
 {
