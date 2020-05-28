@@ -143,3 +143,7 @@ v1.4.4
 v1.4.5
 ------
 1. add hls record feature.
+
+v1.4.6
+------
+1. update the pid file path from "~/" to "/opt/soft/sls/"
