@@ -9,7 +9,7 @@ SLS can only run on OS based on UNIX, such as MacOS, CentOS, Ubuntu, etc.
 
 
 # Compile
-`$ sudo make`
+`$ make`
 
 Binary files is generated in the `bin` directory.
 
