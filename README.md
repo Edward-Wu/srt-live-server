@@ -147,3 +147,12 @@ v1.4.5
 v1.4.6
 ------
 1. update the pid file path from "~/" to "/opt/soft/sls/"
+
+v1.4.7
+------
+1. update the pid file path from to "/opt/soft/sls/" "/tmp/sls" to avoid the root authority in some case.
+
+
+v1.4.8
+------
+1. for compatible srt v1.4.1, add the set latency method before setup method 
