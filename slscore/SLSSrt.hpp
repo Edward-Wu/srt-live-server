@@ -118,6 +118,8 @@ public :
     int  libsrt_getsockstate();
     int  libsrt_getpeeraddr(char * peer_name, int& port);
 
+    void libsrt_set_latency(int latency);
+
 
     static int  libsrt_neterrno();
     static void libsrt_print_error_info();

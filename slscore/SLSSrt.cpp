@@ -144,6 +144,11 @@ void CSLSSrt::libsrt_set_context(SRTContext *sc)
     m_sc = *sc;
 }
 
+void CSLSSrt::libsrt_set_latency(int latency)
+{
+    m_sc.latency = latency;
+}
+
 int CSLSSrt::libsrt_setup(int port)
 {
     struct addrinfo hints = { 0 }, *ai;

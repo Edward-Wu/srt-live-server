@@ -284,6 +284,11 @@ int CSLSListener::start()
     if (NULL == m_srt)
         m_srt = new CSLSSrt();
 
+    int latency = ((sls_conf_server_t*)m_conf)->latency;
+    if (latency > 0) {
+        m_srt->libsrt_set_latency(latency);
+    }
+
     m_port = ((sls_conf_server_t*)m_conf)->listen;
     ret = m_srt->libsrt_setup(m_port);
     if (SLS_OK != ret) {
@@ -292,14 +297,6 @@ int CSLSListener::start()
     }
     sls_log(SLS_LOG_INFO, "[%p]CSLSListener::start, libsrt_setup ok.", this);
 
-    int latency = ((sls_conf_server_t*)m_conf)->latency;
-    if (latency > 0) {
-        ret = m_srt->libsrt_setsockopt(SRTO_LATENCY, "SRTO_LATENCY",  &latency, sizeof (latency));
-        if (SLS_OK != ret) {
-            sls_log(SLS_LOG_INFO, "[%p]CSLSListener::start, libsrt_setsockopt latency=%d failure.", this, latency);
-            return ret;
-        }
-    }
 
     ret = m_srt->libsrt_listen(m_back_log);
     if (SLS_OK != ret) {
