@@ -332,8 +332,8 @@ void sls_remove_marks(char * s) {
     }
 }
 
-static char pid_path_name[] = "/opt/soft/sls";
-static char pid_file_name[] = "/opt/soft/sls/pid.txt";
+static char pid_path_name[] = "/tmp/sls";
+static char pid_file_name[] = "/tmp/sls/pid.txt";
 int sls_read_pid()
 {
 	struct stat stat_file;
