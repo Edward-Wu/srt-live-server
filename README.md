@@ -84,7 +84,7 @@ cd bin
 
 play srt url
 
-./slc -r srt://[your.sls.ip]:8080?streamid=uplive.sls.com/live/test -o [the full file name of ts file to save]
+./slc -r srt://[your.sls.ip]:8080?streamid=live.sls.com/live/test -o [the full file name of ts file to save]
 
 
 Note:
