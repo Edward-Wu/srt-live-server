@@ -61,7 +61,7 @@ $ ./ffmpeg -f avfoundation -framerate 30 -i "0:0" -vcodec libx264  -preset ultra
 
 play the SRT stream with ffplay:
 
-./ffplay -fflag nobuffer -i "srt://[your.sls.ip]:8080?streamid=live.sls.com/live/test"
+./ffplay -fflags nobuffer -i "srt://[your.sls.ip]:8080?streamid=live.sls.com/live/test"
 
 
 2.test with OBS
