@@ -86,6 +86,9 @@ play srt url
 
 ./slc -r srt://[your.sls.ip]:8080?streamid=live.sls.com/live/test -o [the full file name of ts file to save]
 
+4.use sls with docker
+---------------------------
+please refer to :https://hub.docker.com/r/ravenium/srt-live-server
 
 Note:
 =====
