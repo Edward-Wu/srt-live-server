@@ -58,7 +58,7 @@ static void reload_handler(int s){
 static void usage()
 {
     printf("-------------------------------------------------\n");
-    printf("           srt-live-srver \n");
+    printf("           srt-live-server \n");
     printf("                    v%s.%s.%s \n", SLS_MAJOR_VERSION, SLS_MIN_VERSION, SLS_TEST_VERSION);
     printf("-------------------------------------------------\n");
     printf("    \n");
