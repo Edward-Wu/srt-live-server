@@ -158,4 +158,11 @@ v1.4.7
 
 v1.4.8
 ------
-1. for compatible srt v1.4.1, add the set latency method before setup method 
+1. compatible for srt v1.4.1, add the set latency method before setup method 
+
+
+v1.4.9
+------
+1. compatible for raspberrypi.
+
+
