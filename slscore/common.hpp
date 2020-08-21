@@ -103,7 +103,7 @@ int sls_remove_pid();
 int sls_send_cmd(const char *cmd);
 
 void sls_split_string(std::string str, std::string separator, std::vector<std::string> &result, int count=-1);
-std::string sls_find_string(std::vector<std::string> &src, std::string &dst);
+std::string sls_find_string(std::vector<std::string> &src, std::string &dst, bool caseSensitive);
 
 
 /*
