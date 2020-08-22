@@ -153,8 +153,9 @@ int main(int argc, char* argv[])
         sls_log(SLS_LOG_INFO, "sls_manager->start failed, EXIT!");
         goto EXIT_PROC;
     }
-
     conf_srt = (sls_conf_srt_t *)sls_conf_get_root_conf();
+
+    http_stat_client->set_stage_callback(CSLSManager::stat_client_callback, sls_manager);
     if (strlen(conf_srt->stat_post_url) > 0)
         http_stat_client->open(conf_srt->stat_post_url, stat_method, conf_srt->stat_post_interval);
 
@@ -237,8 +238,11 @@ int main(int argc, char* argv[])
                 sls_log(SLS_LOG_INFO, "reload, failed, sls_manager->start, exit.");
                 break;
             }
+
+            http_stat_client->set_stage_callback(CSLSManager::stat_client_callback, sls_manager);
             if (strlen(conf_srt->stat_post_url) > 0)
                 http_stat_client->open(conf_srt->stat_post_url, stat_method, conf_srt->stat_post_interval);
+
             sls_log(SLS_LOG_INFO, "reload successfully.");
 		}
 	}

@@ -297,6 +297,8 @@ void CSLSGroup::check_invalid_sock()
         if (update_stat_info) {
             std::string stat_info = role->get_stat_info();
             CSLSLock lock(&m_mutex_stat);
+            // add delimiter between JSON objects
+            if (it != m_map_role.end() && !stat_info.empty()) stat_info += ',';
             m_stat_info.append(stat_info);
         }
 

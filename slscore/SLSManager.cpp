@@ -284,17 +284,24 @@ int  CSLSManager::check_invalid()
     return SLS_ERROR;
 }
 
-void CSLSManager::get_stat_info(std::string &info)
+void CSLSManager::get_stat_info(std::string &info_str)
 {
+    info_str += '[';
+
     std::list<CSLSGroup *>::iterator it;
     std::list<CSLSGroup *>::iterator it_end = m_workers.end();
-    for ( it = m_workers.begin(); it != it_end; ) {
+    for ( it = m_workers.begin(); it != it_end; it++ ) {
     	CSLSGroup *worker = *it;
-    	it++;
     	if (NULL != worker) {
-    		worker->get_stat_info(info);
+            std::string worker_info;
+    		worker->get_stat_info(worker_info);
+            // add delimiter between JSON objects
+            if (it != m_workers.begin() && !worker_info.empty()) info_str += ',';
+            info_str += worker_info;
     	}
     }
+
+    info_str += ']';
 }
 
 int  CSLSManager::stat_client_callback(void *p, HTTP_CALLBACK_TYPE type, void *v, void* context)
