@@ -377,7 +377,9 @@ void sls_conf_release(sls_conf_base_t * c)
 void sls_conf_close()
 {
     sls_conf_base_t * c = sls_first_conf.child;
-    sls_conf_release(c);
+    if (c != NULL) {
+        sls_conf_release(c);
+    }
 }
 
 sls_conf_base_t * sls_conf_get_root_conf()
