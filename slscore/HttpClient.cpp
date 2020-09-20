@@ -33,7 +33,7 @@
 #define HTTP_REQUEST_HEADER_ACCEPT         "Accept: text/html, */*\r\n"
 //   Accept: text/html, */*
 #define HTTP_REQUEST_HEADER_USER_AGENT     "User-Agent: srt-live-server\r\n"
-#define HTTP_REQUEST_HEADER_CONTENT_TYPE   "Content-Type: application/x-www-form-urlencoded\r\n"
+#define HTTP_REQUEST_HEADER_CONTENT_TYPE   "Content-Type: application/json\r\n"
 //   Host: localhost:8080
 //   Content-Length: 15
 #define HTTP_REQUEST_HEADER_CONNECTION     "Connection: Keep-Alive\r\n"
@@ -90,7 +90,7 @@ int  CHttpClient::open(const char *url, const char *method, int interval)
 		goto FUNC_END;
 	}
 	if (NULL != method && strlen(method) > 0) {
-		sprintf(m_http_method, method);
+		strcpy(m_http_method, method);
 	}
 
 	m_interval = interval;
@@ -279,7 +279,7 @@ int CHttpClient::parse_http_response(std::string &response)
 
     	//Content-Length
 		std::string dst = std::string("Content-Length:");
-		std::string content_length = sls_find_string(m_response_info.m_response_header, dst);
+		std::string content_length = sls_find_string(m_response_info.m_response_header, dst, false);
 		if (content_length.length() > 0) {
 	    	sls_split_string(content_length, ":", parts, 1);
 		    if (parts.size() == 2) {
