@@ -43,6 +43,7 @@ bool CSLSSrt::m_inited = false;
 CSLSSrt::CSLSSrt()
 {
     memset(&m_sc, 0x0, sizeof(m_sc));
+    memset(m_http_url_passphrase, 0, URL_MAX_LEN);
     m_sc.port = 8000;//for test
     m_sc.fd   = 0;
     m_sc.eid  = 0;
@@ -51,7 +52,6 @@ CSLSSrt::CSLSSrt()
     m_sc.backlog = 1024;
     memset(m_peer_name, 0, sizeof(m_peer_name));
     m_peer_port = 0;
-
 }
 CSLSSrt::~CSLSSrt()
 {
@@ -219,9 +219,85 @@ int CSLSSrt::libsrt_setup(int port)
     return SLS_OK;
 }
 
+void CSLSSrt::setup_passphrase_endpoint(const char *http_url_passphrase) {
+    if (NULL == http_url_passphrase || strlen(http_url_passphrase) == 0) {
+	    return ;
+	}
+	strcpy(m_http_url_passphrase, http_url_passphrase);
+}
+
+char *CSLSSrt::get_passphrase_endpoint() {
+    return m_http_url_passphrase;
+}
+
+srt_listen_callback_fn handle_srt_listen_callback;
+int handle_srt_listen_callback(void* opaque, SRTSOCKET ns, int hs_version, const struct sockaddr* peeraddr, const char* streamid) {
+    CSLSSrt* tmp = (CSLSSrt*)(opaque);
+    char * pass_url = tmp->get_passphrase_endpoint();
+
+    if (NULL != pass_url && sizeof(pass_url) > 0) {
+        CHttpClient* m_http_client = new CHttpClient;
+
+        char get_passphrase_url[URL_MAX_LEN] = {0};
+        sprintf(get_passphrase_url, "%s?streamid=%s",
+                pass_url, streamid);
+
+        m_http_client->open(get_passphrase_url);
+
+        while (true) {
+            m_http_client->handler();
+            if (SLS_OK == m_http_client->check_finished() || SLS_OK == m_http_client->check_timeout()) {
+                break;
+            }
+            usleep(10);
+        }
+
+        HTTP_RESPONSE_INFO * re = m_http_client->get_response_info();
+
+        if (NULL == re) {
+            return SLS_ERROR;
+        }
+
+        int ret = strcmp(re->m_response_code.c_str(), HTTP_RESPONSE_CODE_200);
+        if (0 == ret) {
+            const char* response = re->m_response_content.c_str();
+            sls_log(SLS_LOG_INFO, "[%p]CSLSSrt::listen_callback, http finished, %s, http_url='%s', response_code=%s, response='%s'.",
+                            tmp, "m_role_name", get_passphrase_url, re->m_response_code.c_str(), response);
+
+            int ret = SLS_OK;
+
+            if (NULL != response && strlen(response) > 0) {
+                ret = srt_setsockopt(ns, SOL_SOCKET, SRTO_PASSPHRASE, response, strlen(response));
+                if (SLS_OK != ret) {
+                    sls_log(SLS_LOG_INFO, "[%p]CSLSSrt::listen_callback, failed to set passphrase, response='%d'.",
+                            tmp, ret);
+                }
+            }
+
+            m_http_client->close();
+            delete m_http_client;
+            m_http_client = NULL;
+
+            return ret;
+        } else {
+            sls_log(SLS_LOG_INFO, "[%p]CSLSSrt::listen_callback, http refused, invalid %s http_url='%s', response_code=%s, response='%s'.",
+                            tmp, "m_role_name", get_passphrase_url, re->m_response_code.c_str(), re->m_response_content.c_str());
+            m_http_client->close();
+            delete m_http_client;
+            m_http_client = NULL;
+            return SLS_ERROR;
+        }
+    }
+
+    return 0;
+}
+
 int CSLSSrt::libsrt_listen(int backlog)
 {
     m_sc.backlog = backlog;
+    if (NULL != m_http_url_passphrase && strlen(m_http_url_passphrase) > 0) {
+        (void)srt_listen_callback(m_sc.fd, &handle_srt_listen_callback, this);
+    }
     int ret = srt_listen(m_sc.fd, backlog);
     if (ret)
         return libsrt_neterrno();

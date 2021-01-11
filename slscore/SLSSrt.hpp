@@ -26,6 +26,7 @@
 #ifndef _SLSRrt_INCLUDE_
 #define _SLSRrt_INCLUDE_
 
+#include "HttpClient.hpp"
 #include <srt/srt.h>
 
 enum SRTMode {
@@ -120,6 +121,8 @@ public :
 
     void libsrt_set_latency(int latency);
 
+    void setup_passphrase_endpoint(const char * http_url_passphrase);
+    char *get_passphrase_endpoint();
 
     static int  libsrt_neterrno();
     static void libsrt_print_error_info();
@@ -128,7 +131,8 @@ public :
 protected:
     SRTContext m_sc;
     char m_peer_name[256];//peer ip addr, such as 172.12.22.14
-    int  m_peer_port ;
+    int  m_peer_port;
+    char m_http_url_passphrase[URL_MAX_LEN];
 
 private:
     static bool m_inited;
