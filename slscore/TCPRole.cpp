@@ -58,9 +58,9 @@ int CTCPRole::handler(DATA_PARAM *p)
 int CTCPRole::write(const char * buf, int size)
 {
 	int len = 0;
-	len = send(m_fd, buf, size, 0);
+	len = send(m_fd, buf, size, MSG_NOSIGNAL);
 	if (0 >= len) {
-        sls_log(SLS_LOG_INFO, "[%p]CTCPRole::read, len=%d, errno=%d, err='%s'",
+        sls_log(SLS_LOG_INFO, "[%p]CTCPRole::write, len=%d, errno=%d, err='%s'",
         		this, len, errno, strerror(errno));
 
 	}
