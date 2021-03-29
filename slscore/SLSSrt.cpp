@@ -249,7 +249,6 @@ int handle_srt_listen_callback(void* opaque, SRTSOCKET ns, int hs_version, const
             if (SLS_OK == m_http_client->check_finished() || SLS_OK == m_http_client->check_timeout()) {
                 break;
             }
-            usleep(10);
         }
 
         HTTP_RESPONSE_INFO * re = m_http_client->get_response_info();
