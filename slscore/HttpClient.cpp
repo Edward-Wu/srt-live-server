@@ -322,6 +322,7 @@ int CHttpClient::recv()
         }
         data[n] = 0;
         http_response += std::string(data);
+				usleep(10);
 	}
 	if (http_response.length() > 0) {
 		//parse the response

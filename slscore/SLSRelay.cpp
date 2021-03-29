@@ -188,7 +188,6 @@ int CSLSRelay::parse_url(char* url, char *host_name, int& port, char * streamid)
 }
 
 int CSLSRelay::open(const char * srt_url) {
-
     int yes = 1;
     int no = 0;
     char host_name[128] = "192.168.31.56";//test
