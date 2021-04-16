@@ -124,7 +124,7 @@ SRTS_NONEXIST:
     std::map<int, std::string>::iterator it;
     for(it=map_error.begin(); it!=map_error.end(); ++it) {
         sprintf(szBuf, "%d: %s\n", it->first, it->second.c_str());
-        printf(szBuf);
+        puts(szBuf);
     }
     printf("----------end------------\n");
     map_error.clear();

@@ -90,7 +90,7 @@ int  CHttpClient::open(const char *url, const char *method, int interval)
 		goto FUNC_END;
 	}
 	if (NULL != method && strlen(method) > 0) {
-		sprintf(m_http_method, method);
+		strcpy(m_http_method, method);
 	}
 
 	m_interval = interval;

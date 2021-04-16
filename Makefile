@@ -1,3 +1,4 @@
+PREFIX = /usr/local
 SHELL = /bin/sh
 MAIN_NAME=sls
 CLIENT_NAME=slc
@@ -63,4 +64,17 @@ $(OUTPUT_PATH)/%.o: ./$(CORE_PATH)/%.cpp
 clean:
 	rm -f $(OUTPUT_PATH)/*.o
 	rm -rf $(BIN_PATH)/*
+
+install: all
+	@echo installing executable files to ${DESTDIR}${PREFIX}/bin
+	@mkdir -p "${DESTDIR}${PREFIX}/bin"
+	@cp -f ${BIN_PATH}/${MAIN_NAME} "${DESTDIR}${PREFIX}/bin"
+	@chmod 755 "${DESTDIR}${PREFIX}/bin/${MAIN_NAME}"
+	@cp -f ${BIN_PATH}/${CLIENT_NAME} "${DESTDIR}${PREFIX}/bin"
+	@chmod 755 "${DESTDIR}${PREFIX}/bin/${CLIENT_NAME}"
+
+uninstall:
+	@echo removing executable files from ${DESTDIR}${PREFIX}/bin
+	@rm -f "${DESTDIR}${PREFIX}/bin/${MAIN_NAME}"
+	@rm -f "${DESTDIR}${PREFIX}/bin/${CLIENT_NAME}"
 
