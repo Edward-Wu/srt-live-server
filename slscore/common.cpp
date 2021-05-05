@@ -41,6 +41,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -440,12 +441,15 @@ void sls_split_string(std::string str, std::string separator, std::vector<std::s
 	ADD_VECTOR_END(result, str.substr(lastPosition, string::npos));
 }
 
-std::string sls_find_string(std::vector<std::string> &src, std::string &dst)
+std::string sls_find_string(std::vector<std::string> &src, std::string &dst, bool caseSensitive)
 {
+    if (!caseSensitive) std::transform(dst.begin(), dst.end(), dst.begin(), ::tolower);
+
 	std::string ret = std::string("");
 	std::vector<std::string>::iterator it;
     for(it=src.begin(); it!=src.end();) {
     	std::string str = *it;
+        if (!caseSensitive) std::transform(str.begin(), str.end(), str.begin(), ::tolower);
     	it ++;
     	string::size_type pos = str.find(dst);
     	if (pos != std::string::npos)
@@ -827,4 +831,3 @@ void sls_init_ts_info(ts_info *ti)
         }
     }
 }
-
