@@ -221,7 +221,7 @@ int CTCPRole::listen(int port, int backlog)
     serverAdd.sin_port = htons(port);
 
     socklen_t clientAddrLen;
-    int ret = bind(m_fd, (struct sockaddr *)&serverAdd, sizeof(serverAdd));
+    int ret = ::bind(m_fd, (struct sockaddr *)&serverAdd, sizeof(serverAdd));
     if (ret < 0) {
         sls_log(SLS_LOG_ERROR, "[%p]CTCPRole::listen, bind failure, m_fd=%d, port=%d.", this, m_fd, port);
         close();
