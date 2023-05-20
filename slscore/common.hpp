@@ -29,6 +29,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
+#include <ctime>
 #include <vector>
 #include <unistd.h>
 
